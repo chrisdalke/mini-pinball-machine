@@ -1,0 +1,15 @@
+# For more options and information see
+# http://rpf.io/configtxt
+
+# MEMORY
+
+# VIDEO/DISPLAY
+hdmi_force_hotplug=1
+hdmi_cvt=1024 576 60 3 0 0 0
+hdmi_group=2
+hdmi_mode=87
+display_rotate=1
+gpu_mem=256
+
+# AUDIO
+dtparam=audio=on
