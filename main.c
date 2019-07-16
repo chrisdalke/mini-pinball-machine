@@ -18,9 +18,14 @@ int main(void){
     const int screenWidth = 576;
     const int screenHeight = 1024;
 
+    InitAudioDevice();
+    Sound sound = LoadSound("Resources/Audio/1.mp3");
+    PlaySound(sound);
+
     SetConfigFlags(FLAG_SHOW_LOGO | FLAG_VSYNC_HINT);
     InitWindow(screenWidth, screenHeight, "Mini Pinball by Chris Dalke!");
     SetTargetFPS(60);
+
 
     while (!WindowShouldClose()){
         BeginDrawing();
@@ -32,6 +37,9 @@ int main(void){
         DrawCircle(screenWidth/2 + sin(millis() / 500.0) * 100,screenHeight/2 + cos(millis() / 500.0) * 100,20,RED);
         EndDrawing();
     }
+
+    UnloadSound(sound);
+    CloseAudioDevice();
 
     CloseWindow();
 
