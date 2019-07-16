@@ -15,8 +15,8 @@ long long millis() {
 }
 
 int main(void){
-    const int screenWidth = 480;
-    const int screenHeight = 800;
+    const int screenWidth = 576;
+    const int screenHeight = 1024;
 
     InitWindow(screenWidth, screenHeight, "Mini Pinball by Chris Dalke!");
     SetTargetFPS(60);
@@ -26,6 +26,8 @@ int main(void){
         ClearBackground(RAYWHITE);
         DrawFPS(10, 10);
         DrawText("MINI PINBALL BY CHRIS DALKE", 10, 40, 20, GRAY);
+        DrawLine(0,0,0,screenHeight,BLUE);
+        DrawLine(screenWidth,0,screenWidth,screenHeight,BLUE);
         DrawCircle(screenWidth/2 + sin(millis() / 500.0) * 100,screenHeight/2 + cos(millis() / 500.0) * 100,20,RED);
         EndDrawing();
     }
