@@ -18,6 +18,7 @@ int main(void){
     const int screenWidth = 576;
     const int screenHeight = 1024;
 
+    SetConfigFlags(FLAG_SHOW_LOGO | FLAG_VSYNC_HINT);
     InitWindow(screenWidth, screenHeight, "Mini Pinball by Chris Dalke!");
     SetTargetFPS(60);
 
