@@ -241,9 +241,9 @@ int main(void){
     cpShape* leftFlipperShape = cpSpaceAddShape(space,cpPolyShapeNewRaw(leftFlipperBody,4,flipperPoly,0.0f));
     cpShape* rightFlipperShape = cpSpaceAddShape(space,cpPolyShapeNewRaw(rightFlipperBody,4,flipperPoly,0.0f));
     cpShapeSetFriction(leftFlipperShape,0.7);
-    cpShapeSetFriction(leftFlipperShape,0.7);
+    cpShapeSetFriction(rightFlipperShape,0.7);
     cpShapeSetElasticity(leftFlipperShape,0.6);
-    cpShapeSetElasticity(leftFlipperShape,0.6);
+    cpShapeSetElasticity(rightFlipperShape,0.6);
     cpBodySetCenterOfGravity(leftFlipperBody,cpv(flipperHeight/2.0f,flipperHeight/2.0f));
     cpBodySetCenterOfGravity(rightFlipperBody,cpv(flipperHeight/2.0f,flipperHeight/2.0f));
     float flipperSpeed = 800.0f;

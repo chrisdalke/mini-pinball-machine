@@ -9,11 +9,11 @@ InputManager* inputInit(){
     input->leftKeyPressed = 0;
     input->rightKeyPressed = 0;
     input->centerKeyPressed = 0;
-    return fd;
+    return input->fd;
 }
 
 void inputShutdown(InputManager* input){
-    serialClose(inputId);
+    serialClose(input->fd);
 }
 
 void inputUpdate(InputManager* input){
