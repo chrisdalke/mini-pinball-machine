@@ -6,5 +6,5 @@ const int worldHeight = 160;
 const float flipperWidth = 19.0;
 const float flipperHeight = 4.75;
 
-const float worldToScreen = (float)screenWidth / (float)worldWidth;
-const float screenToWorld = (float)worldWidth / (float)screenWidth;
+const float worldToScreen = 8.88888889f;
+const float screenToWorld = 0.2f;
