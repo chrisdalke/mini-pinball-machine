@@ -23,15 +23,43 @@ typedef struct {
 } Ball;
 
 typedef struct {
+    cpShape *shape;
+    cpBody *body;
+    float bounceEffect;
+} Bumper;
+
+typedef struct {
     cpSpace *space;
     int numBalls;
     Ball *balls;
     int active;
 } GameStruct;
 
+enum CollisionTypes {
+    COLLISION_WALL = 0,
+	COLLISION_BALL = 1,
+    COLLISION_BUMPER = 2,
+    COLLISION_PADDLE = 3
+};
+
 const int numWalls = 64;
 const int maxBalls = 16;
 const float ballSize = 5;
+
+// Collision handlers
+static cpBool CollisionHandlerBallBumper(cpArbiter *arb, cpSpace *space, void *ignore){
+	CP_ARBITER_GET_SHAPES(arb, a, b);
+	Bumper* bumper = (Bumper *)cpShapeGetUserData(b);
+    Ball *ball = (Ball *)cpShapeGetUserData(a);
+
+    // On the bumper object, set the collision effect
+    bumper->bounceEffect = 10.0f;
+
+    // On the ball object, add a random velocity
+    cpBodyApplyImpulseAtLocalPoint(ball->body,cpv(rand() % 20 - 10, rand() % 20 - 10),cpvzero);
+
+	return cpTrue;
+}
 
 // Add ball function
 void addBall(GameStruct *game, float px, float py, float vx, float vy){
@@ -55,6 +83,8 @@ void addBall(GameStruct *game, float px, float py, float vx, float vy){
         game->balls[ballIndex].shape = cpSpaceAddShape(game->space,cpCircleShapeNew(game->balls[ballIndex].body,radius,cpvzero));
         cpShapeSetFriction(game->balls[ballIndex].shape,0.0);
         cpShapeSetElasticity(game->balls[ballIndex].shape,0.7);
+        cpShapeSetCollisionType(game->balls[ballIndex].shape, COLLISION_BALL);
+        cpShapeSetUserData(game->balls[ballIndex].shape,&(game->balls[ballIndex]));
         game->balls[ballIndex].active = 1;
     }
 }
@@ -122,6 +152,8 @@ int main(void){
 
     Texture bgTex = LoadTexture("Resources/Textures/background2.png");
     Texture ballTex = LoadTexture("Resources/Textures/ball.png");
+    Texture bumperTex = LoadTexture("Resources/Textures/bumper.png");
+    Texture shockwaveTex = LoadTexture("Resources/Textures/shockwave.png");
 
     // Initialize physics simulation
     cpVect gravity = cpv(0,100);
@@ -135,8 +167,44 @@ int main(void){
         cpShape *wall = cpSegmentShapeNew(cpSpaceGetStaticBody(space),cpv(walls[i][0],walls[i][1]),cpv(walls[i][2],walls[i][3]),0);
         cpShapeSetFriction(wall,0);
         cpShapeSetElasticity(wall,0.7);
+        cpShapeSetCollisionType(wall, COLLISION_WALL);
         cpSpaceAddShape(space,wall);
     }
+
+    // Create bumpers
+    const int numBumpers = 3;
+    const float bumperSize = 10.0f;
+    const float bumperBounciness = 2.0f;
+    Bumper* bumpers = malloc(numBumpers * sizeof(Bumper));
+
+    bumpers[0].body = cpSpaceAddBody(space,cpBodyNewKinematic());
+    cpBodySetPosition(bumpers[0].body,cpv(20.4,20));
+    bumpers[0].shape = cpSpaceAddShape(space,cpCircleShapeNew(bumpers[0].body,bumperSize/2.0f,cpvzero));
+    cpShapeSetElasticity(bumpers[0].shape,bumperBounciness);
+    cpShapeSetCollisionType(bumpers[0].shape, COLLISION_BUMPER);
+    cpShapeSetUserData(bumpers[0].shape,&bumpers[0]);
+    bumpers[0].bounceEffect = 0;
+
+    bumpers[1].body = cpSpaceAddBody(space,cpBodyNewKinematic());
+    cpBodySetPosition(bumpers[1].body,cpv(42.4,18.4));
+    bumpers[1].shape = cpSpaceAddShape(space,cpCircleShapeNew(bumpers[1].body,bumperSize/2.0f,cpvzero));
+    cpShapeSetElasticity(bumpers[1].shape,bumperBounciness);
+    cpShapeSetCollisionType(bumpers[1].shape, COLLISION_BUMPER);
+    cpShapeSetUserData(bumpers[1].shape,&bumpers[1]);
+    bumpers[1].bounceEffect = 0;
+
+    bumpers[2].body = cpSpaceAddBody(space,cpBodyNewKinematic());
+    cpBodySetPosition(bumpers[2].body,cpv(33.6,36.8));
+    bumpers[2].shape = cpSpaceAddShape(space,cpCircleShapeNew(bumpers[2].body,bumperSize/2.0f,cpvzero));
+    cpShapeSetElasticity(bumpers[2].shape,bumperBounciness);
+    cpShapeSetCollisionType(bumpers[2].shape, COLLISION_BUMPER);
+    cpShapeSetUserData(bumpers[2].shape,&bumpers[2]);
+    bumpers[2].bounceEffect = 0;
+
+    //Add collision handler for ball-bumper effect
+    cpCollisionHandler *handler = cpSpaceAddCollisionHandler(space,COLLISION_BALL,COLLISION_BUMPER);
+    handler->beginFunc = CollisionHandlerBallBumper;
+
 
     //create balls array
     Ball* balls = malloc(maxBalls * sizeof(Ball));
@@ -169,7 +237,6 @@ int main(void){
             if (game.numBalls == 0){
                 addBall(&game,89.5 - ballSize / 2,160,0,-200);
             }
-            printf("%d\n",game.numBalls);
 
             // Check if any balls have fallen outside the screen
             // Remove them if they have.
@@ -178,7 +245,6 @@ int main(void){
                     cpVect pos = cpBodyGetPosition(balls[i].body);
                     if (pos.y > 170+ballSize){
                         balls[i].active = 0;
-                        printf("Ball fallen outside screen\n");
                         cpSpaceRemoveShape(game.space,balls[i].shape);
                         cpSpaceRemoveBody(game.space,balls[i].body);
                         cpShapeFree(balls[i].shape);
@@ -186,6 +252,11 @@ int main(void){
                         game.numBalls--;
                     }
                 }
+            }
+
+            // Update bumper
+            for (int i = 0; i < numBumpers; i++){
+                bumpers[i].bounceEffect *= 0.94;
             }
         }
 
@@ -199,6 +270,17 @@ int main(void){
                 cpVect pos = cpBodyGetPosition(balls[i].body);
                 DrawTexturePro(ballTex,(Rectangle){0,0,ballTex.width,ballTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,ballSize * worldToScreen,ballSize * worldToScreen},(Vector2){(ballSize / 2.0) * worldToScreen,(ballSize / 2.0) * worldToScreen},0,WHITE);
             }
+        }
+
+        // Render bumpers
+        for (int i = 0; i < numBumpers; i++){
+            cpVect pos = cpBodyGetPosition(bumpers[i].body);
+            float bounceScale = 0.2f;
+            float width = bumperSize + cos(millis() / 20.0) * bumpers[i].bounceEffect * bounceScale;
+            float height = bumperSize + sin(millis() / 20.0) * bumpers[i].bounceEffect * bounceScale;
+            float shockSize = (bumperSize * bumpers[i].bounceEffect) * 0.15f;
+            DrawTexturePro(shockwaveTex,(Rectangle){0,0,shockwaveTex.width,shockwaveTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,shockSize * worldToScreen,shockSize * worldToScreen},(Vector2){shockSize/2 * worldToScreen,shockSize/2 * worldToScreen},0,WHITE);
+            DrawTexturePro(bumperTex,(Rectangle){0,0,bumperTex.width,bumperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,width * worldToScreen,height * worldToScreen},(Vector2){(width / 2.0) * worldToScreen,(height / 2.0) * worldToScreen},0,WHITE);
         }
 
         // DEBUG RENDERING
