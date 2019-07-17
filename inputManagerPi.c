@@ -9,7 +9,7 @@ InputManager* inputInit(){
     input->leftKeyPressed = 0;
     input->rightKeyPressed = 0;
     input->centerKeyPressed = 0;
-    return input->fd;
+    return input;
 }
 
 void inputShutdown(InputManager* input){
