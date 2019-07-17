@@ -4,8 +4,11 @@
 #include <sys/time.h>
 #include <math.h>
 #include <chipmunk.h>
+#include "constants.h"
+#include "physicsDebugDraw.h"
 
 #define DEG_TO_RAD (3.14159265 / 180.0)
+#define RAD_TO_DEG (180.0 / 3.14159265)
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -56,7 +59,7 @@ static cpBool CollisionHandlerBallBumper(cpArbiter *arb, cpSpace *space, void *i
     bumper->bounceEffect = 10.0f;
 
     // On the ball object, add a random velocity
-    cpBodyApplyImpulseAtLocalPoint(ball->body,cpv(rand() % 20 - 10, rand() % 20 - 10),cpvzero);
+    //cpBodyApplyImpulseAtLocalPoint(ball->body,cpv(rand() % 20 - 10, rand() % 20 - 10),cpvzero);
 
 	return cpTrue;
 }
@@ -75,7 +78,7 @@ void addBall(GameStruct *game, float px, float py, float vx, float vy){
         }
 
         float radius = ballSize / 2.0;
-        float mass = 1.0;
+        float mass = 10.0;
         cpFloat moment = cpMomentForCircle(mass, 0, radius, cpvzero);
         game->balls[ballIndex].body = cpSpaceAddBody(game->space,cpBodyNew(mass,moment));
         cpBodySetPosition(game->balls[ballIndex].body,cpv(px,py));
@@ -113,14 +116,29 @@ void writeCircleWallSegment(float walls[numWalls][4],int segmentIndex,int numSeg
     }
 }
 
-int main(void){
-    const int screenWidth = 450;
-    const int screenHeight = 800;
-    const int worldWidth = 90;
-    const int worldHeight = 160;
+// Debug drawing functions
+static void
+ChipmunkDebugDrawCirclePointer(cpVect p, cpFloat a, cpFloat r, cpSpaceDebugColor outline, cpSpaceDebugColor fill, cpDataPointer data)
+{ChipmunkDebugDrawCircle(p, a, r, outline, fill);}
 
-    const float worldToScreen = (float)screenWidth / (float)worldWidth;
-    const float screenToWorld = (float)worldWidth / (float)screenWidth;
+static void
+ChipmunkDebugDrawSegmentPointer(cpVect a, cpVect b, cpSpaceDebugColor color, cpDataPointer data)
+{ChipmunkDebugDrawSegment(a, b, color);}
+
+static void
+ChipmunkDebugDrawFatSegmentPointer(cpVect a, cpVect b, cpFloat r, cpSpaceDebugColor outline, cpSpaceDebugColor fill, cpDataPointer data)
+{ChipmunkDebugDrawFatSegment(a, b, r, outline, fill);}
+
+static void
+ChipmunkDebugDrawPolygonPointer(int count, const cpVect *verts, cpFloat r, cpSpaceDebugColor outline, cpSpaceDebugColor fill, cpDataPointer data)
+{ChipmunkDebugDrawPolygon(count, verts, r, outline, fill);}
+
+static void
+ChipmunkDebugDrawDotPointer(cpFloat size, cpVect pos, cpSpaceDebugColor color, cpDataPointer data)
+{ChipmunkDebugDrawDot(size, pos, color);}
+
+
+int main(void){
 
     // Initialize a struct encoding data about the game.
     GameStruct game;
@@ -154,6 +172,9 @@ int main(void){
     Texture ballTex = LoadTexture("Resources/Textures/ball.png");
     Texture bumperTex = LoadTexture("Resources/Textures/bumper.png");
     Texture shockwaveTex = LoadTexture("Resources/Textures/shockwave.png");
+    Texture debugTex = LoadTexture("Resources/Textures/debugSmall.png");
+    Texture leftFlipperTex = LoadTexture("Resources/Textures/flipperL.png");
+    Texture rightFlipperTex = LoadTexture("Resources/Textures/flipperR.png");
 
     // Initialize physics simulation
     cpVect gravity = cpv(0,100);
@@ -165,8 +186,8 @@ int main(void){
     // create walls
     for (int i = 0; i < numWalls; i++){
         cpShape *wall = cpSegmentShapeNew(cpSpaceGetStaticBody(space),cpv(walls[i][0],walls[i][1]),cpv(walls[i][2],walls[i][3]),0);
-        cpShapeSetFriction(wall,0);
-        cpShapeSetElasticity(wall,0.7);
+        cpShapeSetFriction(wall,0.5);
+        cpShapeSetElasticity(wall,0.5);
         cpShapeSetCollisionType(wall, COLLISION_WALL);
         cpSpaceAddShape(space,wall);
     }
@@ -174,7 +195,7 @@ int main(void){
     // Create bumpers
     const int numBumpers = 3;
     const float bumperSize = 10.0f;
-    const float bumperBounciness = 2.0f;
+    const float bumperBounciness = 2.2f;
     Bumper* bumpers = malloc(numBumpers * sizeof(Bumper));
 
     bumpers[0].body = cpSpaceAddBody(space,cpBodyNewKinematic());
@@ -205,6 +226,29 @@ int main(void){
     cpCollisionHandler *handler = cpSpaceAddCollisionHandler(space,COLLISION_BALL,COLLISION_BUMPER);
     handler->beginFunc = CollisionHandlerBallBumper;
 
+    // Create left and right flippers
+    cpBody* leftFlipperBody = cpBodyNewKinematic();
+    cpBody* rightFlipperBody = cpBodyNewKinematic();
+    cpBodySetPosition(leftFlipperBody,cpv(19.8,145.45));
+    cpBodySetPosition(rightFlipperBody,cpv(63.5,145.45));
+    const cpVect flipperPoly[4] = {
+        {0,0},
+        {flipperWidth,0},
+        {flipperWidth,flipperHeight},
+        {0,flipperHeight}
+    };
+    cpShape* leftFlipperShape = cpSpaceAddShape(space,cpPolyShapeNewRaw(leftFlipperBody,4,flipperPoly,0.0f));
+    cpShape* rightFlipperShape = cpSpaceAddShape(space,cpPolyShapeNewRaw(rightFlipperBody,4,flipperPoly,0.0f));
+    cpShapeSetFriction(leftFlipperShape,0.7);
+    cpShapeSetFriction(leftFlipperShape,0.7);
+    cpShapeSetElasticity(leftFlipperShape,0.6);
+    cpShapeSetElasticity(leftFlipperShape,0.6);
+    cpBodySetCenterOfGravity(leftFlipperBody,cpv(flipperHeight/2.0f,flipperHeight/2.0f));
+    cpBodySetCenterOfGravity(rightFlipperBody,cpv(flipperHeight/2.0f,flipperHeight/2.0f));
+    float flipperSpeed = 800.0f;
+    float leftFlipperAngle = 33.0f;
+    float rightFlipperAngle = 147.0f;
+    float flipperSpeedScalar = 1.0f;
 
     //create balls array
     Ball* balls = malloc(maxBalls * sizeof(Ball));
@@ -214,29 +258,94 @@ int main(void){
         balls[i].active = 0;
     }
 
+    // Setup debug draw options
+    cpSpaceDebugDrawOptions drawOptions = {
+    	ChipmunkDebugDrawCirclePointer,
+    	ChipmunkDebugDrawSegmentPointer,
+    	ChipmunkDebugDrawFatSegmentPointer,
+    	ChipmunkDebugDrawPolygonPointer,
+    	ChipmunkDebugDrawDotPointer,
+    	(cpSpaceDebugDrawFlags)(CP_SPACE_DEBUG_DRAW_SHAPES | CP_SPACE_DEBUG_DRAW_CONSTRAINTS | CP_SPACE_DEBUG_DRAW_COLLISION_POINTS),
+    	{0xEE/255.0f, 0xE8/255.0f, 0xD5/255.0f, 1.0f}, // Outline color
+    	ChipmunkDebugGetColorForShape,
+    	{0.0f, 0.75f, 0.0f, 1.0f}, // Constraint color
+    	{1.0f, 0.0f, 0.0f, 1.0f}, // Collision point color
+    	NULL,
+    };
+
     // Setup timestepping system
     int timestep = 1000.0/60.0;
     long long accumulatedTime = 0;
     long long startTime = millis();
     long long endTime = millis();
-
+    long long elapsedTimeStart = millis();
     while (!WindowShouldClose()){
         endTime = millis();
         accumulatedTime += (endTime - startTime);
         startTime = millis();
 
+        float mouseX = GetMouseX() * 2.0;
+        float mouseY = GetMouseY() * 2.0;
+
         // STEP SIMULATION AT FIXED RATE
         while (accumulatedTime > timestep){
             accumulatedTime -= timestep;
-            cpSpaceStep(space, timeStep / 2.0);
-            cpSpaceStep(space, timeStep / 2.0);
+            float slowMotionFactor = 1.0f;
+            float effectiveTimestep = (timeStep) * slowMotionFactor;
+            cpSpaceStep(space, effectiveTimestep / 2.0f);
+            cpSpaceStep(space, effectiveTimestep / 2.0f);
 
             if (IsKeyPressed(KEY_SPACE)){
-                addBall(&game,89.5 - ballSize / 2,160,0,-200);
+                addBall(&game,89.5 - ballSize / 2,160,0,-220);
             }
             if (game.numBalls == 0){
-                addBall(&game,89.5 - ballSize / 2,160,0,-200);
+                addBall(&game,89.5 - ballSize / 2,160,0,-220);
             }
+
+            if (IsMouseButtonPressed(0)){
+                addBall(&game,mouseX * screenToWorld,mouseY * screenToWorld,0,0);
+
+            }
+
+            float oldAngleLeft = leftFlipperAngle;
+            float oldAngleRight = rightFlipperAngle;
+            float targetAngleLeft = 0.0f;
+            float targetAngleRight = 0.0f;
+            if (IsKeyDown(KEY_LEFT)){
+                targetAngleLeft = -33.0f;
+                leftFlipperAngle -= (flipperSpeed * effectiveTimestep);
+                if (leftFlipperAngle < targetAngleLeft){
+                    leftFlipperAngle = targetAngleLeft;
+                }
+            } else {
+                targetAngleLeft = 33.0f;
+                leftFlipperAngle += (flipperSpeed * effectiveTimestep);
+                if (leftFlipperAngle > targetAngleLeft){
+                    leftFlipperAngle = targetAngleLeft;
+                }
+            }
+            if (IsKeyDown(KEY_RIGHT)){
+                targetAngleRight = 213.0f;
+                rightFlipperAngle += (flipperSpeed * effectiveTimestep);
+                if (rightFlipperAngle > targetAngleRight){
+                    rightFlipperAngle = targetAngleRight;
+                }
+            } else {
+                targetAngleRight = 147.0f;
+                rightFlipperAngle -= (flipperSpeed * effectiveTimestep);
+                if (rightFlipperAngle < targetAngleRight){
+                    rightFlipperAngle = targetAngleRight;
+                }
+            }
+
+            float deltaAngularVelocityLeft = ((leftFlipperAngle * DEG_TO_RAD) - (oldAngleLeft * DEG_TO_RAD)) / effectiveTimestep;
+            float deltaAngularVelocityRight = ((rightFlipperAngle * DEG_TO_RAD) - (oldAngleRight * DEG_TO_RAD)) / effectiveTimestep;
+            cpBodySetAngle(leftFlipperBody,leftFlipperAngle * DEG_TO_RAD);
+            cpBodySetAngle(rightFlipperBody,rightFlipperAngle * DEG_TO_RAD);
+            cpBodySetAngularVelocity(leftFlipperBody,deltaAngularVelocityLeft * flipperSpeedScalar);
+            cpBodySetAngularVelocity(rightFlipperBody,deltaAngularVelocityRight * flipperSpeedScalar);
+            cpSpaceReindexShapesForBody(space,leftFlipperBody);
+            cpSpaceReindexShapesForBody(space,rightFlipperBody);
 
             // Check if any balls have fallen outside the screen
             // Remove them if they have.
@@ -283,13 +392,20 @@ int main(void){
             DrawTexturePro(bumperTex,(Rectangle){0,0,bumperTex.width,bumperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,width * worldToScreen,height * worldToScreen},(Vector2){(width / 2.0) * worldToScreen,(height / 2.0) * worldToScreen},0,WHITE);
         }
 
+        // Render left flipper
+        cpVect pos = cpBodyGetPosition(leftFlipperBody);
+        cpFloat angle = cpBodyGetAngle(leftFlipperBody);
+        DrawTexturePro(leftFlipperTex,(Rectangle){0,0,leftFlipperTex.width,leftFlipperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,flipperWidth * worldToScreen,flipperHeight * worldToScreen},(Vector2){0 * worldToScreen,0 * worldToScreen},(angle * RAD_TO_DEG),WHITE);
+        // Render right flipper
+        pos = cpBodyGetPosition(rightFlipperBody);
+        angle = cpBodyGetAngle(rightFlipperBody);
+        DrawTexturePro(rightFlipperTex,(Rectangle){0,0,rightFlipperTex.width,rightFlipperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,flipperWidth * worldToScreen,flipperHeight * worldToScreen},(Vector2){0 * worldToScreen,0 * worldToScreen},(angle * RAD_TO_DEG),WHITE);
+
+
         // DEBUG RENDERING
         if (IsKeyDown(KEY_TAB)){
             DrawFPS(10, 10);
-            DrawText("MINI PINBALL BY CHRIS DALKE", 10, 40, 20, GRAY);
 
-            float mouseX = GetMouseX() * 2.0;
-            float mouseY = GetMouseY() * 2.0;
             DrawLine(0,mouseY,screenWidth,mouseY,RED);
             DrawLine(mouseX,0,mouseX,screenHeight,RED);
             if (IsMouseButtonPressed(0)){
@@ -301,6 +417,8 @@ int main(void){
                 DrawCircle(walls[i][0]*worldToScreen,walls[i][1]*worldToScreen,2,RED);
                 DrawCircle(walls[i][2]*worldToScreen,walls[i][3]*worldToScreen,2,RED);
             }
+
+            cpSpaceDebugDraw(space, &drawOptions);
         }
 
         EndDrawing();
