@@ -27,11 +27,11 @@ int inputLeft(InputManager* input){
 }
 
 int inputRight(InputManager* input){
-    return (input->keyState & 1);
+    return (input->keyState & 2);
 }
 
 int inputCenter(InputManager* input){
-    return (input->keyState & 2);
+    return (input->keyState & 1);
 }
 
 int inputLeftPressed(InputManager* input){
