@@ -17,7 +17,7 @@ void inputShutdown(InputManager* input){
 }
 
 void inputUpdate(InputManager* input){
-    if (serialDataAvail(input->fd) > 0){
+    while (serialDataAvail(input->fd) > 0){
         input->keyState = serialGetchar(input->fd);
     }
 }
