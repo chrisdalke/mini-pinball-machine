@@ -144,6 +144,7 @@ int main(void){
 
         // STEP SIMULATION AT FIXED RATE
         while (accumulatedTime > timestep){
+            printf("Stepping simulation\n");
             accumulatedTime -= timestep;
             cpSpaceStep(space, timeStep);
 
@@ -153,6 +154,7 @@ int main(void){
         }
 
         // RENDER AT SPEED GOVERNED BY RAYLIB
+        printf("Rendering\n");
         BeginDrawing();
         DrawTexturePro(bgTex,(Rectangle){0,0,bgTex.width,bgTex.height},(Rectangle){0,0,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
 
@@ -183,6 +185,7 @@ int main(void){
         }
 
         EndDrawing();
+        printf("Done frame\n");
     }
 
     UnloadSound(sound);
