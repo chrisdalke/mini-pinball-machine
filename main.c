@@ -6,6 +6,7 @@
 #include <chipmunk.h>
 #include "constants.h"
 #include "physicsDebugDraw.h"
+#include "inputManager.h"
 
 #define DEG_TO_RAD (3.14159265 / 180.0)
 #define RAD_TO_DEG (180.0 / 3.14159265)
@@ -273,6 +274,9 @@ int main(void){
     	NULL,
     };
 
+    // Setup input
+    int input = inputInit();
+
     // Setup timestepping system
     int timestep = 1000.0/60.0;
     long long accumulatedTime = 0;
@@ -287,6 +291,9 @@ int main(void){
         float mouseX = GetMouseX() * 2.0;
         float mouseY = GetMouseY() * 2.0;
 
+        // Poll input
+        inputUpdate(input);
+
         // STEP SIMULATION AT FIXED RATE
         while (accumulatedTime > timestep){
             accumulatedTime -= timestep;
@@ -295,7 +302,7 @@ int main(void){
             cpSpaceStep(space, effectiveTimestep / 2.0f);
             cpSpaceStep(space, effectiveTimestep / 2.0f);
 
-            if (IsKeyPressed(KEY_SPACE)){
+            if (inputCenterPressed(input)){
                 addBall(&game,89.5 - ballSize / 2,160,0,-220);
             }
             if (game.numBalls == 0){
@@ -311,7 +318,7 @@ int main(void){
             float oldAngleRight = rightFlipperAngle;
             float targetAngleLeft = 0.0f;
             float targetAngleRight = 0.0f;
-            if (IsKeyDown(KEY_LEFT)){
+            if (inputLeft(input)){
                 targetAngleLeft = -33.0f;
                 leftFlipperAngle -= (flipperSpeed * effectiveTimestep);
                 if (leftFlipperAngle < targetAngleLeft){
@@ -324,7 +331,7 @@ int main(void){
                     leftFlipperAngle = targetAngleLeft;
                 }
             }
-            if (IsKeyDown(KEY_RIGHT)){
+            if (inputRight(input)){
                 targetAngleRight = 213.0f;
                 rightFlipperAngle += (flipperSpeed * effectiveTimestep);
                 if (rightFlipperAngle > targetAngleRight){
@@ -424,6 +431,7 @@ int main(void){
         EndDrawing();
     }
 
+    inputShutdown(input);
     UnloadSound(sound);
     CloseAudioDevice();
 
