@@ -110,12 +110,14 @@ int main(void){
     Texture ballTex = LoadTexture("Resources/Textures/ball.png");
 
     // Initialize physics simulation
+    printf("Initializing space\n");
     cpVect gravity = cpv(0,100);
     cpSpace *space = cpSpaceNew();
     game.space = space;
     cpSpaceSetGravity(space,gravity);
     cpFloat timeStep = 1.0/60.0;
 
+    printf("Creating walls\n");
     // create walls
     for (int i = 0; i < numWalls; i++){
         cpShape *wall = cpSegmentShapeNew(cpSpaceGetStaticBody(space),cpv(walls[i][0],walls[i][1]),cpv(walls[i][2],walls[i][3]),0);
@@ -123,6 +125,7 @@ int main(void){
         cpSpaceAddShape(space,wall);
     }
 
+    printf("Creating balls\n");
     //create balls array
     Ball* balls = malloc(maxBalls * sizeof(Ball));
     game.balls = balls;
@@ -133,6 +136,7 @@ int main(void){
     long long startTime = millis();
     long long endTime = millis();
 
+    printf("Starting main loop\n");
     while (!WindowShouldClose()){
         endTime = millis();
         accumulatedTime += (endTime - startTime);
