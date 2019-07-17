@@ -1,43 +1,71 @@
 #include "inputManager.h"
 #include <wiringSerial.h>
+#include <stdlib.h>
 
-int inputInit(){
-    int fd = serialOpen("/dev/ttyACM0",9600);
-    return 0;
+InputManager* inputInit(){
+    InputManager *input = malloc(sizeof(InputManager));
+    input->fd = serialOpen("/dev/ttyACM0",9600);
+    input->keyState = 0;
+    input->leftKeyPressed = 0;
+    input->rightKeyPressed = 0;
+    input->centerKeyPressed = 0;
+    return fd;
 }
 
-void inputShutdown(int inputId){
+void inputShutdown(InputManager* input){
     serialClose(inputId);
 }
 
-void inputUpdate(int inputId){
-    if (serialDataAvail(input) > 0){
-        int nextChar = serialGetchar(inputId);
-        printf("%d\n",nextChar);
+void inputUpdate(InputManager* input){
+    if (serialDataAvail(input->fd) > 0){
+        input->keyState = serialGetchar(input->fd);
     }
-    return;
 }
 
-int inputLeft(int inputId){
+int inputLeft(InputManager* input){
+    return (input->keyState & 4);
+}
+
+int inputRight(InputManager* input){
+    return (input->keyState & 1);
+}
+
+int inputCenter(InputManager* input){
+    return (input->keyState & 2);
+}
+
+int inputLeftPressed(InputManager* input){
+    if (inputLeft(input)){
+        if (input->leftKeyPressed == 0){
+            input->leftKeyPressed = 1;
+            return 1;
+        }
+    } else {
+        input->leftKeyPressed = 0;
+    }
     return 0;
 }
 
-int inputRight(int inputId){
+int inputRightPressed(InputManager* input){
+    if (inputRight(input)){
+        if (input->rightKeyPressed == 0){
+            input->rightKeyPressed = 1;
+            return 1;
+        }
+    } else {
+        input->rightKeyPressed = 0;
+    }
     return 0;
 }
 
-int inputCenter(int inputId){
-    return 0;
-}
-
-int inputLeftPressed(int inputId){
-    return 0;
-}
-
-int inputRightPressed(int inputId){
-    return 0;
-}
-
-int inputCenterPressed(int inputId){
+int inputCenterPressed(InputManager* input){
+    if (inputCenter(input)){
+        if (input->centerKeyPressed == 0){
+            input->centerKeyPressed = 1;
+            return 1;
+        }
+    } else {
+        input->centerKeyPressed = 0;
+    }
     return 0;
 }

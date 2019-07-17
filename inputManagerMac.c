@@ -1,37 +1,39 @@
 #include "raylib.h"
 #include "inputManager.h"
+#include <stdlib.h>
 
-void inputInit(){
+InputManager* inputInit(){
+    InputManager *input = malloc(sizeof(InputManager));
+    return input;
+}
+
+void inputUpdate(InputManager* input){
+    return;
+}
+void inputShutdown(InputManager* input){
     return;
 }
 
-void inputUpdate(){
-    return;
-}
-void inputShutdown(int inputId){
-    return;
-}
-
-int inputLeft(){
+int inputLeft(InputManager* input){
     return IsKeyDown(KEY_LEFT);
 }
 
-int inputRight(){
+int inputRight(InputManager* input){
     return IsKeyDown(KEY_RIGHT);
 }
 
-int inputCenter(){
+int inputCenter(InputManager* input){
     return IsKeyDown(KEY_SPACE);
 }
 
-int inputLeftPressed(){
+int inputLeftPressed(InputManager* input){
     return IsKeyPressed(KEY_LEFT);
 }
 
-int inputRightPressed(){
+int inputRightPressed(InputManager* input){
     return IsKeyPressed(KEY_RIGHT);
 }
 
-int inputCenterPressed(){
+int inputCenterPressed(InputManager* input){
     return IsKeyPressed(KEY_SPACE);
 }

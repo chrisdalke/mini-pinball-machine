@@ -275,7 +275,7 @@ int main(void){
     };
 
     // Setup input
-    int input = inputInit();
+    InputManager *input = inputInit();
 
     // Setup timestepping system
     int timestep = 1000.0/60.0;
