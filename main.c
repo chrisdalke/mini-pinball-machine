@@ -17,6 +17,7 @@ long long millis() {
 }
 
 typedef struct {
+    int active;
     cpShape *shape;
     cpBody *body;
 } Ball;
@@ -25,6 +26,7 @@ typedef struct {
     cpSpace *space;
     int numBalls;
     Ball *balls;
+    int active;
 } GameStruct;
 
 const int numWalls = 64;
@@ -32,16 +34,28 @@ const int maxBalls = 16;
 const float ballSize = 5;
 
 // Add ball function
-void addBall(GameStruct *game, float px, float py){
+void addBall(GameStruct *game, float px, float py, float vx, float vy){
     if (game->numBalls < maxBalls){
         game->numBalls++;
+        // Find the first index that isn't active
+        int ballIndex = 0;
+        for (int i = 0; i < maxBalls; i++){
+            if (game->balls[i].active == 0){
+                ballIndex = i;
+                break;
+            }
+        }
+
         float radius = ballSize / 2.0;
         float mass = 1.0;
         cpFloat moment = cpMomentForCircle(mass, 0, radius, cpvzero);
-        game->balls[game->numBalls - 1].body = cpSpaceAddBody(game->space,cpBodyNew(mass,moment));
-        cpBodySetPosition(game->balls[game->numBalls - 1].body,cpv(px,py));
-        game->balls[game->numBalls - 1].shape = cpSpaceAddShape(game->space,cpCircleShapeNew(game->balls[game->numBalls - 1].body,radius,cpvzero));
-        cpShapeSetFriction(game->balls[game->numBalls - 1].shape,0.7);
+        game->balls[ballIndex].body = cpSpaceAddBody(game->space,cpBodyNew(mass,moment));
+        cpBodySetPosition(game->balls[ballIndex].body,cpv(px,py));
+        cpBodySetVelocity(game->balls[ballIndex].body,cpv(vx,vy));
+        game->balls[ballIndex].shape = cpSpaceAddShape(game->space,cpCircleShapeNew(game->balls[ballIndex].body,radius,cpvzero));
+        cpShapeSetFriction(game->balls[ballIndex].shape,0.0);
+        cpShapeSetElasticity(game->balls[ballIndex].shape,0.7);
+        game->balls[ballIndex].active = 1;
     }
 }
 
@@ -110,25 +124,27 @@ int main(void){
     Texture ballTex = LoadTexture("Resources/Textures/ball.png");
 
     // Initialize physics simulation
-    printf("Initializing space\n");
     cpVect gravity = cpv(0,100);
     cpSpace *space = cpSpaceNew();
     game.space = space;
     cpSpaceSetGravity(space,gravity);
     cpFloat timeStep = 1.0/60.0;
 
-    printf("Creating walls\n");
     // create walls
     for (int i = 0; i < numWalls; i++){
         cpShape *wall = cpSegmentShapeNew(cpSpaceGetStaticBody(space),cpv(walls[i][0],walls[i][1]),cpv(walls[i][2],walls[i][3]),0);
         cpShapeSetFriction(wall,0);
+        cpShapeSetElasticity(wall,0.7);
         cpSpaceAddShape(space,wall);
     }
 
-    printf("Creating balls\n");
     //create balls array
     Ball* balls = malloc(maxBalls * sizeof(Ball));
     game.balls = balls;
+    game.numBalls = 0;
+    for (int i = 0; i < maxBalls; i++){
+        balls[i].active = 0;
+    }
 
     // Setup timestepping system
     int timestep = 1000.0/60.0;
@@ -136,7 +152,6 @@ int main(void){
     long long startTime = millis();
     long long endTime = millis();
 
-    printf("Starting main loop\n");
     while (!WindowShouldClose()){
         endTime = millis();
         accumulatedTime += (endTime - startTime);
@@ -144,24 +159,46 @@ int main(void){
 
         // STEP SIMULATION AT FIXED RATE
         while (accumulatedTime > timestep){
-            printf("Stepping simulation\n");
             accumulatedTime -= timestep;
-            cpSpaceStep(space, timeStep);
+            cpSpaceStep(space, timeStep / 2.0);
+            cpSpaceStep(space, timeStep / 2.0);
 
             if (IsKeyPressed(KEY_SPACE)){
-                addBall(&game,70,50);
+                addBall(&game,89.5 - ballSize / 2,160,0,-200);
+            }
+            if (game.numBalls == 0){
+                addBall(&game,89.5 - ballSize / 2,160,0,-200);
+            }
+            printf("%d\n",game.numBalls);
+
+            // Check if any balls have fallen outside the screen
+            // Remove them if they have.
+            for (int i = 0; i < maxBalls; i++){
+                if (balls[i].active == 1){
+                    cpVect pos = cpBodyGetPosition(balls[i].body);
+                    if (pos.y > 170+ballSize){
+                        balls[i].active = 0;
+                        printf("Ball fallen outside screen\n");
+                        cpSpaceRemoveShape(game.space,balls[i].shape);
+                        cpSpaceRemoveBody(game.space,balls[i].body);
+                        cpShapeFree(balls[i].shape);
+                        cpBodyFree(balls[i].body);
+                        game.numBalls--;
+                    }
+                }
             }
         }
 
         // RENDER AT SPEED GOVERNED BY RAYLIB
-        printf("Rendering\n");
         BeginDrawing();
         DrawTexturePro(bgTex,(Rectangle){0,0,bgTex.width,bgTex.height},(Rectangle){0,0,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
 
         // Render balls
-        for (int i = 0; i < game.numBalls; i++){
-            cpVect pos = cpBodyGetPosition(balls[i].body);
-            DrawTexturePro(ballTex,(Rectangle){0,0,ballTex.width,ballTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,ballSize * worldToScreen,ballSize * worldToScreen},(Vector2){(ballSize / 2.0) * worldToScreen,(ballSize / 2.0) * worldToScreen},0,WHITE);
+        for (int i = 0; i < maxBalls; i++){
+            if (balls[i].active == 1){
+                cpVect pos = cpBodyGetPosition(balls[i].body);
+                DrawTexturePro(ballTex,(Rectangle){0,0,ballTex.width,ballTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,ballSize * worldToScreen,ballSize * worldToScreen},(Vector2){(ballSize / 2.0) * worldToScreen,(ballSize / 2.0) * worldToScreen},0,WHITE);
+            }
         }
 
         // DEBUG RENDERING
@@ -185,7 +222,6 @@ int main(void){
         }
 
         EndDrawing();
-        printf("Done frame\n");
     }
 
     UnloadSound(sound);
