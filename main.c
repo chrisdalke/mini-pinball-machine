@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include <math.h>
+#include <chipmunk.h>
 
 #define DEG_TO_RAD (3.14159265 / 180.0)
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
@@ -77,6 +78,9 @@ int main(void){
     SetTargetFPS(60);
 
     Texture bgTex = LoadTexture("Resources/Textures/background2.png");
+
+    // Initialize physics simulation
+    cpVect gravity = cpv(0,-100);
 
 
     while (!WindowShouldClose()){
