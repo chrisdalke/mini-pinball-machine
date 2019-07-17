@@ -52,7 +52,7 @@ int main(void){
 
     const float ballSize = 5;
 
-    float walls[numWalls][4] = {
+    float walls[64][4] = {
         {0,0,worldWidth,0},
         {0,0,0,worldHeight},
         {worldWidth,0,worldWidth,worldHeight},
@@ -88,7 +88,7 @@ int main(void){
         if (IsKeyDown(KEY_TAB)){
             DrawFPS(10, 10);
             DrawText("MINI PINBALL BY CHRIS DALKE", 10, 40, 20, GRAY);
-            
+
             float mouseX = GetMouseX() * 2.0;
             float mouseY = GetMouseY() * 2.0;
             DrawLine(0,mouseY,screenWidth,mouseY,RED);
