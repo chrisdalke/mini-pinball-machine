@@ -61,6 +61,7 @@ typedef struct GameStructData {
     int numLives;
     int menuState;
     int nameSelectIndex;
+    int nameSelectDone;
 } GameStruct;
 
 typedef struct {
@@ -199,7 +200,7 @@ int main(void){
     Sound sound = LoadSound("Resources/Audio/1.mp3");
     PlaySound(sound);
 
-    //SetConfigFlags(FLAG_SHOW_LOGO | FLAG_VSYNC_HINT);
+    SetConfigFlags(FLAG_SHOW_LOGO | FLAG_VSYNC_HINT);
     InitWindow(screenWidth, screenHeight, "Mini Pinball by Chris Dalke!");
     SetTargetFPS(60);
 
@@ -214,6 +215,7 @@ int main(void){
     Texture titleOverlay = LoadTexture("Resources/Textures/titleOverlay.png");
     Texture menuOverlay1 = LoadTexture("Resources/Textures/menuOverlay1.png");
     Texture gameOverOverlay1 = LoadTexture("Resources/Textures/gameOverOverlay1.png");
+    Texture gameOverOverlay2 = LoadTexture("Resources/Textures/gameOverOverlay2.png");
     Texture arrowRight = LoadTexture("Resources/Textures/arrowRight.png");
     Texture menuControls = LoadTexture("Resources/Textures/menuControls.png");
     Texture transitionTex = LoadTexture("Resources/Textures/transition.png");
@@ -372,11 +374,17 @@ int main(void){
     game.transitionTarget = TRANSITION_TO_MENU;
 
     game.menuState = 0;
-    game.gameState = 2;
+
+    //game.gameState = 2;
+    game.nameSelectIndex = 0;
+    game.nameSelectDone = 0;
+
+
+    game.gameState = 5;
 
     char tempString[128];
     char nameString[6];
-    sprintf(nameString,"-----");
+    sprintf(nameString,"     ");
 
 
     while (!WindowShouldClose()){
@@ -425,6 +433,7 @@ int main(void){
                     case TRANSITION_GAME_OVER: {
                         game.gameState = 2;
                         game.nameSelectIndex = 0;
+                        game.nameSelectDone = 0;
                         printf("Transition to game over\n");
                         break;
                     }
@@ -454,21 +463,21 @@ int main(void){
                 }
             }
 
+            // Update pinballs
+            for (int i = 0; i < 16; i++){
+                menuPinballs[i].px += menuPinballs[i].vx;
+                menuPinballs[i].py += menuPinballs[i].vy;
+                menuPinballs[i].vy += 0.1f;
+                if (menuPinballs[i].py > screenHeight + 20){
+                    menuPinballs[i].px = 228;
+                    menuPinballs[i].py = 126;
+                    menuPinballs[i].vx = ((rand() % 40) / 10.0f) - 2.0f;
+                    menuPinballs[i].vy = ((rand() % 50) / -10.0f);
+                }
+            }
             if (game.gameState == 0){
                 // Menu
 
-                // Update pinballs
-                for (int i = 0; i < 16; i++){
-                    menuPinballs[i].px += menuPinballs[i].vx;
-                    menuPinballs[i].py += menuPinballs[i].vy;
-                    menuPinballs[i].vy += 0.1f;
-                    if (menuPinballs[i].py > screenHeight + 20){
-                        menuPinballs[i].px = 228;
-                        menuPinballs[i].py = 126;
-                        menuPinballs[i].vx = ((rand() % 40) / 10.0f) - 2.0f;
-                        menuPinballs[i].vy = ((rand() % 50) / -10.0f);
-                    }
-                }
 
                 if (inputCenterPressed(input)){
                     game.transitionState = 1;
@@ -573,35 +582,43 @@ int main(void){
             }
             if (game.gameState == 2){
                 // Game over
-                if (inputRightPressed(input)){
-                    game.nameSelectIndex++;
-                    if (game.nameSelectIndex > 5){
-                        game.nameSelectIndex = 0;
-                    }
-                }
-                if (inputLeftPressed(input)){
-                    game.nameSelectIndex--;
-                    if (game.nameSelectIndex < 0){
-                        game.nameSelectIndex = 5;
-                    }
-                }
-                if (inputCenterPressed(input)){
-                    if (game.nameSelectIndex == 5){
-                        // Name selection done
-                    } else {
-                        if (game.nameSelectIndex > 0){
-                            while (game.nameSelectIndex-1 >= 0 && nameString[game.nameSelectIndex-1] == 45){
-                                game.nameSelectIndex--;
-                            }
+                if (game.nameSelectDone == 0){
+                    if (inputRightPressed(input)){
+                        game.nameSelectIndex++;
+                        if (game.nameSelectIndex > 5){
+                            game.nameSelectIndex = 0;
                         }
-                        if (nameString[game.nameSelectIndex] < 65 || nameString[game.nameSelectIndex] > 90){
-                            nameString[game.nameSelectIndex] = 65;
+                    }
+                    if (inputLeftPressed(input)){
+                        game.nameSelectIndex--;
+                        if (game.nameSelectIndex < 0){
+                            game.nameSelectIndex = 5;
+                        }
+                    }
+                    if (inputCenterPressed(input)){
+                        if (game.nameSelectIndex == 5){
+                            // Name selection done
+                            // Submit score and start transition to menu.
+                            game.nameSelectDone = 1;
+                            game.transitionState = 1;
+                            game.transitionTarget = TRANSITION_TO_MENU;
+                            submitScore(scores,nameString,game.gameScore);
+                            printf("Game Over. score: %d\n",game.gameScore);
                         } else {
-                            nameString[game.nameSelectIndex] = (nameString[game.nameSelectIndex] + 1);
-                            if (nameString[game.nameSelectIndex] > 90){
-                                nameString[game.nameSelectIndex] = 45;
-                            } else if (nameString[game.nameSelectIndex] < 65){
-                                nameString[game.nameSelectIndex] = 90;
+                            if (game.nameSelectIndex > 0){
+                                while (game.nameSelectIndex-1 >= 0 && nameString[game.nameSelectIndex-1] == 32){
+                                    game.nameSelectIndex--;
+                                }
+                            }
+                            if (nameString[game.nameSelectIndex] < 65 || nameString[game.nameSelectIndex] > 90){
+                                nameString[game.nameSelectIndex] = 65;
+                            } else {
+                                nameString[game.nameSelectIndex] = (nameString[game.nameSelectIndex] + 1);
+                                if (nameString[game.nameSelectIndex] > 90){
+                                    nameString[game.nameSelectIndex] = 32;
+                                } else if (nameString[game.nameSelectIndex] < 65){
+                                    nameString[game.nameSelectIndex] = 90;
+                                }
                             }
                         }
                     }
@@ -741,7 +758,19 @@ int main(void){
 			BeginShaderMode(swirlShader);
             DrawTexturePro(bgMenu,(Rectangle){0,0,bgMenu.width,bgMenu.height},(Rectangle){xOffset + screenWidth/2,yOffset + screenWidth/2,width,height},(Vector2){width/2,height/2},angle,WHITE);
             EndShaderMode();
-            DrawTexturePro(gameOverOverlay1,(Rectangle){0,0,titleOverlay.width,titleOverlay.height},(Rectangle){0,0,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
+
+
+            for (int i = 0; i < 16; i++){
+                DrawTexturePro(ballTex,(Rectangle){0,0,ballTex.width,ballTex.height},(Rectangle){menuPinballs[i].px,menuPinballs[i].py,30,30},(Vector2){0,0},0,(Color){0,0,0,50});
+            }
+
+            DrawTexturePro(gameOverOverlay1,(Rectangle){0,0,gameOverOverlay1.width,gameOverOverlay1.height},(Rectangle){0,0,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
+            DrawTexturePro(gameOverOverlay2,(Rectangle){0,0,gameOverOverlay2.width,gameOverOverlay2.height},(Rectangle){0,12 + sin((millis() - elapsedTimeStart) / 1000.0f)*5.0f,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
+
+            sprintf(tempString,"%d",game.gameScore);
+            DrawTextEx(font2, "Score:", (Vector2){screenWidth/2 - MeasureTextEx(font2, "Score:", 60, 1.0).x/2,275}, 60, 1.0, WHITE);
+            DrawTextEx(font2, tempString, (Vector2){screenWidth/2 - MeasureTextEx(font2, tempString, 60, 1.0).x/2,332}, 60, 1.0, WHITE);
+
 
             //DrawTexturePro(titleOverlay,(Rectangle){0,0,titleOverlay.width,titleOverlay.height},(Rectangle){0,12 + sin(timeFactor)*5.0f,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
             //DrawTextEx(font1, "Score: ", (Vector2){x,y}, 40, 1.0, textColor);
@@ -749,8 +778,8 @@ int main(void){
             for (int i =0; i < 5; i++){
                 sprintf(tempString,"%c",nameString[i]);
                 float textWidth = MeasureTextEx(font2, tempString, 60, 1.0).x;
-                if (nameString[i] == 45){
-                    DrawTextEx(font2, tempString, (Vector2){54 + (i * 62) - textWidth / 2,510}, 60, 1.0, DARKGRAY);
+                if (nameString[i] == 32){
+                    DrawTextEx(font2, "-", (Vector2){54 + (i * 62) - textWidth / 2,510}, 60, 1.0, DARKGRAY);
                 } else {
                     DrawTextEx(font2, tempString, (Vector2){54 + (i * 62) - textWidth / 2,510}, 60, 1.0, WHITE);
                 }
