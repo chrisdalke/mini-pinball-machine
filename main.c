@@ -33,6 +33,9 @@ typedef struct {
     cpShape *shape;
     cpBody *body;
     GameStruct *game;
+    float locationHistoryX[16];
+    float locationHistoryY[16];
+    int trailStartIndex;
 } Ball;
 
 typedef enum {
@@ -112,7 +115,7 @@ void addBall(GameStruct *game, float px, float py, float vx, float vy){
         }
 
         float radius = ballSize / 2.0;
-        float mass = 10.0;
+        float mass = 1.0;
         cpFloat moment = cpMomentForCircle(mass, 0, radius, cpvzero);
         game->balls[ballIndex].body = cpSpaceAddBody(game->space,cpBodyNew(mass,moment));
         cpBodySetPosition(game->balls[ballIndex].body,cpv(px,py));
@@ -124,6 +127,12 @@ void addBall(GameStruct *game, float px, float py, float vx, float vy){
         cpShapeSetUserData(game->balls[ballIndex].shape,&(game->balls[ballIndex]));
         game->balls[ballIndex].active = 1;
         game->balls[ballIndex].game = game;
+        game->balls[ballIndex].trailStartIndex = 0;
+
+        for (int i = 0; i< 16; i++){
+            game->balls[ballIndex].locationHistoryX[i] = px;
+            game->balls[ballIndex].locationHistoryY[i] = py;
+        }
     }
 }
 
@@ -206,6 +215,7 @@ int main(void){
 
     Texture bgTex = LoadTexture("Resources/Textures/background2.png");
     Texture ballTex = LoadTexture("Resources/Textures/ball.png");
+    Texture trailTex = LoadTexture("Resources/Textures/trail.png");
     Texture bumperTex = LoadTexture("Resources/Textures/bumper.png");
     Texture shockwaveTex = LoadTexture("Resources/Textures/shockwave.png");
     Texture debugTex = LoadTexture("Resources/Textures/debugSmall.png");
@@ -312,13 +322,13 @@ int main(void){
     };
     cpShape* leftFlipperShape = cpSpaceAddShape(space,cpPolyShapeNewRaw(leftFlipperBody,4,flipperPoly,0.0f));
     cpShape* rightFlipperShape = cpSpaceAddShape(space,cpPolyShapeNewRaw(rightFlipperBody,4,flipperPoly,0.0f));
-    cpShapeSetFriction(leftFlipperShape,0.7);
-    cpShapeSetFriction(rightFlipperShape,0.7);
-    cpShapeSetElasticity(leftFlipperShape,0.6);
-    cpShapeSetElasticity(rightFlipperShape,0.6);
+    cpShapeSetFriction(leftFlipperShape,0.8);
+    cpShapeSetFriction(rightFlipperShape,0.8);
+    cpShapeSetElasticity(leftFlipperShape,0.2);
+    cpShapeSetElasticity(rightFlipperShape,0.2);
     cpBodySetCenterOfGravity(leftFlipperBody,cpv(flipperHeight/2.0f,flipperHeight/2.0f));
     cpBodySetCenterOfGravity(rightFlipperBody,cpv(flipperHeight/2.0f,flipperHeight/2.0f));
-    float flipperSpeed = 800.0f;
+    float flipperSpeed = 900.0f;
     float leftFlipperAngle = 33.0f;
     float rightFlipperAngle = 147.0f;
     float flipperSpeedScalar = 1.0f;
@@ -403,8 +413,6 @@ int main(void){
         // STEP SIMULATION AT FIXED RATE
         while (accumulatedTime > timestep){
             accumulatedTime -= timestep;
-            float slowMotionFactor = 1.0f;
-            float effectiveTimestep = (timeStep) * slowMotionFactor;
 
             //printf("%d %f %d\n",game.transitionState,game.transitionAlpha,game.transitionTarget);
             if (game.transitionState == 1){
@@ -491,10 +499,13 @@ int main(void){
                     game.menuState = 0;
                 }
             }
+            float slowMotionFactor = 1.0f;
+            float effectiveTimestep = (timeStep) * slowMotionFactor;
             if (game.gameState == 1){
                 // Game
-                cpSpaceStep(space, effectiveTimestep / 2.0f);
-                cpSpaceStep(space, effectiveTimestep / 2.0f);
+                cpSpaceStep(space, effectiveTimestep / 3.0f);
+                cpSpaceStep(space, effectiveTimestep / 3.0f);
+                cpSpaceStep(space, effectiveTimestep / 3.0f);
 
                 if (inputCenter(input)){
                     //addBall(&game,89.5 - ballSize / 2,160,0,-220);
@@ -515,16 +526,16 @@ int main(void){
                     }
                 }
 
-                //if (IsMouseButtonPressed(0)){
-                //    addBall(&game,mouseX * screenToWorld,mouseY * screenToWorld,0,0);
-                //}
+                if (IsMouseButtonPressed(0)){
+                    addBall(&game,mouseX * screenToWorld,mouseY * screenToWorld,0,0);
+                }
 
                 float oldAngleLeft = leftFlipperAngle;
                 float oldAngleRight = rightFlipperAngle;
                 float targetAngleLeft = 0.0f;
                 float targetAngleRight = 0.0f;
                 if (inputLeft(input)){
-                    targetAngleLeft = -33.0f;
+                    targetAngleLeft = -33.0f - 10.0f;
                     leftFlipperAngle -= (flipperSpeed * effectiveTimestep);
                     if (leftFlipperAngle < targetAngleLeft){
                         leftFlipperAngle = targetAngleLeft;
@@ -537,7 +548,7 @@ int main(void){
                     }
                 }
                 if (inputRight(input)){
-                    targetAngleRight = 213.0f;
+                    targetAngleRight = 213.0f + 10.0f;
                     rightFlipperAngle += (flipperSpeed * effectiveTimestep);
                     if (rightFlipperAngle > targetAngleRight){
                         rightFlipperAngle = targetAngleRight;
@@ -572,6 +583,17 @@ int main(void){
                             cpBodyFree(balls[i].body);
                             game.numBalls--;
                         }
+                    }
+                }
+
+                //Update ball trails
+                printf("updating ball trails\n");
+                for (int i = 0; i < maxBalls; i++){
+                    if (balls[i].active == 1){
+                        cpVect pos = cpBodyGetPosition(balls[i].body);
+                        balls[i].locationHistoryX[balls[i].trailStartIndex] = pos.x;
+                        balls[i].locationHistoryY[balls[i].trailStartIndex] = pos.y;
+                        balls[i].trailStartIndex = (balls[i].trailStartIndex + 1) % 16;
                     }
                 }
 
@@ -698,6 +720,19 @@ int main(void){
             // Render balls
             for (int i = 0; i < maxBalls; i++){
                 if (balls[i].active == 1){
+                    // Render trails
+
+                    //printf("rendiner ball trails\n");
+                    for (int ii = 1; ii <= 16; ii++){
+                        //printf("%d\n",ii);
+                        int index = (balls[i].trailStartIndex + ii - 1);
+                        if (index >= 16){
+                            index -= 16;
+                        }
+                        float trailSize = ballSize * sqrt(ii/16.0f);
+                        DrawTexturePro(trailTex,(Rectangle){0,0,trailTex.width,trailTex.height},(Rectangle){balls[i].locationHistoryX[index] * worldToScreen,balls[i].locationHistoryY[index] * worldToScreen,trailSize * worldToScreen,trailSize * worldToScreen},(Vector2){(trailSize / 2.0) * worldToScreen,(trailSize / 2.0) * worldToScreen},0,WHITE);
+                    }
+                    //Render ball
                     cpVect pos = cpBodyGetPosition(balls[i].body);
                     DrawTexturePro(ballTex,(Rectangle){0,0,ballTex.width,ballTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,ballSize * worldToScreen,ballSize * worldToScreen},(Vector2){(ballSize / 2.0) * worldToScreen,(ballSize / 2.0) * worldToScreen},0,WHITE);
                 }
@@ -724,7 +759,7 @@ int main(void){
             DrawTexturePro(rightFlipperTex,(Rectangle){0,0,rightFlipperTex.width,rightFlipperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,flipperWidth * worldToScreen,flipperHeight * worldToScreen},(Vector2){0 * worldToScreen,0 * worldToScreen},(angle * RAD_TO_DEG),WHITE);
 
             sprintf(tempString,"%d)",game.gameScore);
-            DrawTextEx(font1, tempString, (Vector2){screenWidth/2,screenHeight/2}, 30, 1.0, WHITE);
+            //DrawTextEx(font1, tempString, (Vector2){screenWidth/2,screenHeight/2}, 30, 1.0, WHITE);
 
 
             // DEBUG RENDERING
