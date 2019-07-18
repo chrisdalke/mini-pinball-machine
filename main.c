@@ -7,6 +7,7 @@
 #include "constants.h"
 #include "physicsDebugDraw.h"
 #include "inputManager.h"
+#include "scores.h"
 
 #define DEG_TO_RAD (3.14159265 / 180.0)
 #define RAD_TO_DEG (180.0 / 3.14159265)
@@ -25,11 +26,13 @@ long long millis() {
     long long milliseconds = te.tv_sec*1000LL + te.tv_usec/1000;
     return milliseconds;
 }
+typedef struct GameStructData GameStruct;
 
 typedef struct {
     int active;
     cpShape *shape;
     cpBody *body;
+    GameStruct *game;
 } Ball;
 
 typedef struct {
@@ -38,12 +41,13 @@ typedef struct {
     float bounceEffect;
 } Bumper;
 
-typedef struct {
+typedef struct GameStructData {
     cpSpace *space;
     int numBalls;
     Ball *balls;
     int active;
     int gameState;
+    int gameScore;
     int transitionState;
     float transitionAlpha;
     int numLives;
@@ -76,6 +80,7 @@ static cpBool CollisionHandlerBallBumper(cpArbiter *arb, cpSpace *space, void *i
 
     // On the bumper object, set the collision effect
     bumper->bounceEffect = 10.0f;
+    (ball->game)->gameScore += 100;
 
     // On the ball object, add a random velocity
     //cpBodyApplyImpulseAtLocalPoint(ball->body,cpv(rand() % 20 - 10, rand() % 20 - 10),cpvzero);
@@ -108,6 +113,7 @@ void addBall(GameStruct *game, float px, float py, float vx, float vy){
         cpShapeSetCollisionType(game->balls[ballIndex].shape, COLLISION_BALL);
         cpShapeSetUserData(game->balls[ballIndex].shape,&(game->balls[ballIndex]));
         game->balls[ballIndex].active = 1;
+        game->balls[ballIndex].game = game;
     }
 }
 
@@ -200,6 +206,8 @@ int main(void){
     Texture menuOverlay1 = LoadTexture("Resources/Textures/menuOverlay1.png");
     Texture arrowRight = LoadTexture("Resources/Textures/arrowRight.png");
     Texture menuControls = LoadTexture("Resources/Textures/menuControls.png");
+
+    Font font1 = LoadFontEx("Resources/Fonts/Avenir-Black.ttf",80,0,0);
 
     Shader swirlShader = LoadShader(0, FormatText("Resources/Shaders/glsl%i/wave.fs", GLSL_VERSION));
     int secondsLoc = GetShaderLocation(swirlShader, "secondes");
@@ -337,6 +345,9 @@ int main(void){
     // Setup input
     InputManager *input = inputInit();
 
+    // Setup score system
+    ScoreHelper *scores = initScores();
+
     // Setup timestepping system
     int timestep = 1000.0/60.0;
     long long accumulatedTime = 0;
@@ -350,6 +361,8 @@ int main(void){
     game.transitionAlpha = 0;
 
     game.menuState = 0;
+
+    char tempString[128];
 
 
     while (!WindowShouldClose()){
@@ -406,6 +419,7 @@ int main(void){
                 if (inputCenterPressed(input)){
                     game.gameState = 1;
                     game.numLives = 3;
+                    game.gameScore = 0;
                 }
 
                 if (inputLeftPressed(input)){
@@ -430,6 +444,9 @@ int main(void){
                     } else {
                         // game over condition
                         game.gameState = 0;
+                        // Test: Submit score
+                        submitScore(scores,"DALK",game.gameScore);
+                        printf("Game Over. score: %d\n",game.gameScore);
                     }
                 }
 
@@ -531,6 +548,30 @@ int main(void){
             }
 
             if (game.menuState == 0){
+                DrawTextEx(font1, "Top Scores", (Vector2){153,329}, 36.0, 1.0, WHITE);
+                float y = 362;
+                for (int i = 1; i <= 10; i++){
+                    ScoreObject *score = getRankedScore(scores,i);
+                    float fontSize = 44.0 - (i * 3.25);
+                    if (fontSize < 18.0){
+                        fontSize = 18.0;
+                    }
+                    Color textColor = WHITE;
+                    if (score != NULL){
+                        sprintf(tempString,"%d)",i);
+                        DrawTextEx(font1, tempString, (Vector2){66 - MeasureTextEx(font1, tempString, fontSize, 1.0).x,y}, fontSize, 1.0, textColor);
+                        sprintf(tempString,"%s",score->scoreName);
+                        DrawTextEx(font1, tempString, (Vector2){75,y}, fontSize, 1.0, textColor);
+                        sprintf(tempString,"%d",score->scoreValue);
+                        DrawTextEx(font1, tempString, (Vector2){404 - MeasureTextEx(font1, tempString, fontSize, 1.0).x,y}, fontSize, 1.0, textColor);
+                    } else {
+                        textColor = GRAY;
+                        sprintf(tempString,"%d)",i);
+                        DrawTextEx(font1, tempString, (Vector2){66 - MeasureTextEx(font1, tempString, fontSize, 1.0).x,y}, fontSize, 1.0, textColor);
+                        DrawTextEx(font1, "No Score", (Vector2){75,y}, fontSize, 1.0, textColor);
+                    }
+                    y += (fontSize * 0.8) + 2;
+                }
             } else if (game.menuState == 1){
                 DrawTexturePro(menuControls,(Rectangle){0,0,menuControls.width,menuControls.height},(Rectangle){26,320,menuControls.width/2,menuControls.height/2},(Vector2){0,0},0,WHITE);
 
@@ -569,6 +610,9 @@ int main(void){
             angle = cpBodyGetAngle(rightFlipperBody);
             DrawTexturePro(rightFlipperTex,(Rectangle){0,0,rightFlipperTex.width,rightFlipperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,flipperWidth * worldToScreen,flipperHeight * worldToScreen},(Vector2){0 * worldToScreen,0 * worldToScreen},(angle * RAD_TO_DEG),WHITE);
 
+            sprintf(tempString,"%d)",game.gameScore);
+            DrawTextEx(font1, tempString, (Vector2){screenWidth/2,screenHeight/2}, 30, 1.0, WHITE);
+
 
             // DEBUG RENDERING
             if (IsKeyDown(KEY_TAB)){
@@ -597,6 +641,7 @@ int main(void){
         EndDrawing();
     }
 
+    shutdownScores(scores);
     inputShutdown(input);
     UnloadSound(sound);
     CloseAudioDevice();
