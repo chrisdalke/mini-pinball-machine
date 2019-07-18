@@ -1,6 +1,6 @@
 #ifndef HEADER_SCORES
 #define HEADER_SCORES
-#include <sqlite3.h>
+#include "sqlite3.h"
 
 typedef struct {
     char *scoreName;
