@@ -47,6 +47,7 @@ typedef struct {
     int transitionState;
     float transitionAlpha;
     int numLives;
+    int menuState;
 } GameStruct;
 
 typedef struct {
@@ -198,6 +199,7 @@ int main(void){
     Texture titleOverlay = LoadTexture("Resources/Textures/titleOverlay.png");
     Texture menuOverlay1 = LoadTexture("Resources/Textures/menuOverlay1.png");
     Texture arrowRight = LoadTexture("Resources/Textures/arrowRight.png");
+    Texture menuControls = LoadTexture("Resources/Textures/menuControls.png");
 
     Shader swirlShader = LoadShader(0, FormatText("Resources/Shaders/glsl%i/wave.fs", GLSL_VERSION));
     int secondsLoc = GetShaderLocation(swirlShader, "secondes");
@@ -347,6 +349,8 @@ int main(void){
     game.transitionState = 0;
     game.transitionAlpha = 0;
 
+    game.menuState = 0;
+
 
     while (!WindowShouldClose()){
         endTime = millis();
@@ -402,6 +406,13 @@ int main(void){
                 if (inputCenterPressed(input)){
                     game.gameState = 1;
                     game.numLives = 3;
+                }
+
+                if (inputLeftPressed(input)){
+                    game.menuState = 1;
+                }
+                if (inputRightPressed(input)){
+                    game.menuState = 0;
                 }
             }
             if (game.gameState == 1){
@@ -517,6 +528,12 @@ int main(void){
             //DrawTexturePro(arrowRight,(Rectangle){0,0,arrowRight.width,arrowRight.height},(Rectangle){screenWidth/2,screenHeight-16,32,32},(Vector2){16,16},90,WHITE);
             if (IsMouseButtonPressed(0)){
                 printf("{%f,%f}\n",(float)(mouseX),(float)(mouseY));
+            }
+
+            if (game.menuState == 0){
+            } else if (game.menuState == 1){
+                DrawTexturePro(menuControls,(Rectangle){0,0,menuControls.width,menuControls.height},(Rectangle){26,320,menuControls.width/2,menuControls.height/2},(Vector2){0,0},0,WHITE);
+
             }
 
         }
