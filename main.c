@@ -13,6 +13,12 @@
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
+#if defined(PLATFORM_RPI)
+    #define GLSL_VERSION            100
+#else   // PLATFORM_RPI, PLATFORM_ANDROID, PLATFORM_WEB
+    #define GLSL_VERSION            330
+#endif
+
 long long millis() {
     struct timeval te;
     gettimeofday(&te, NULL);
@@ -37,7 +43,18 @@ typedef struct {
     int numBalls;
     Ball *balls;
     int active;
+    int gameState;
+    int transitionState;
+    float transitionAlpha;
+    int numLives;
 } GameStruct;
+
+typedef struct {
+    float px;
+    float py;
+    float vx;
+    float vy;
+} MenuPinball;
 
 enum CollisionTypes {
     COLLISION_WALL = 0,
@@ -143,6 +160,7 @@ int main(void){
 
     // Initialize a struct encoding data about the game.
     GameStruct game;
+    game.gameState = 0;
 
 
     float walls[64][4] = {
@@ -176,6 +194,35 @@ int main(void){
     Texture debugTex = LoadTexture("Resources/Textures/debugSmall.png");
     Texture leftFlipperTex = LoadTexture("Resources/Textures/flipperL.png");
     Texture rightFlipperTex = LoadTexture("Resources/Textures/flipperR.png");
+    Texture bgMenu = LoadTexture("Resources/Textures/bgMenu.png");
+    Texture titleOverlay = LoadTexture("Resources/Textures/titleOverlay.png");
+    Texture menuOverlay1 = LoadTexture("Resources/Textures/menuOverlay1.png");
+    Texture arrowRight = LoadTexture("Resources/Textures/arrowRight.png");
+
+    Shader swirlShader = LoadShader(0, FormatText("Resources/Shaders/glsl%i/wave.fs", GLSL_VERSION));
+    int secondsLoc = GetShaderLocation(swirlShader, "secondes");
+	int freqXLoc = GetShaderLocation(swirlShader, "freqX");
+	int freqYLoc = GetShaderLocation(swirlShader, "freqY");
+	int ampXLoc = GetShaderLocation(swirlShader, "ampX");
+	int ampYLoc = GetShaderLocation(swirlShader, "ampY");
+	int speedXLoc = GetShaderLocation(swirlShader, "speedX");
+	int speedYLoc = GetShaderLocation(swirlShader, "speedY");
+	float freqX = 25.0f;
+	float freqY = 25.0f;
+	float ampX = 5.0f;
+	float ampY = 5.0f;
+	float speedX = 8.0f;
+	float speedY = 8.0f;
+    float screenSize[2] = {screenWidth,screenHeight};
+	SetShaderValue(swirlShader, GetShaderLocation(swirlShader, "size"), &screenSize, UNIFORM_VEC2);
+	SetShaderValue(swirlShader, freqXLoc, &freqX, UNIFORM_FLOAT);
+	SetShaderValue(swirlShader, freqYLoc, &freqY, UNIFORM_FLOAT);
+	SetShaderValue(swirlShader, ampXLoc, &ampX, UNIFORM_FLOAT);
+	SetShaderValue(swirlShader, ampYLoc, &ampY, UNIFORM_FLOAT);
+	SetShaderValue(swirlShader, speedXLoc, &speedX, UNIFORM_FLOAT);
+	SetShaderValue(swirlShader, speedYLoc, &speedY, UNIFORM_FLOAT);
+    float shaderSeconds = 0.0f;
+
 
     // Initialize physics simulation
     cpVect gravity = cpv(0,100);
@@ -198,6 +245,7 @@ int main(void){
     const float bumperSize = 10.0f;
     const float bumperBounciness = 2.2f;
     Bumper* bumpers = malloc(numBumpers * sizeof(Bumper));
+
 
     bumpers[0].body = cpSpaceAddBody(space,cpBodyNewKinematic());
     cpBodySetPosition(bumpers[0].body,cpv(20.4,20));
@@ -274,6 +322,16 @@ int main(void){
     	NULL,
     };
 
+    // Menu setup
+    MenuPinball* menuPinballs = malloc(32 * sizeof(MenuPinball));
+    // Initialize pinballs
+    for (int i = 0; i < 32; i++){
+        menuPinballs[i].px = -100;
+        menuPinballs[i].py = (rand() % screenHeight);
+        menuPinballs[i].vx = 0;
+        menuPinballs[i].vy = 0;
+    }
+
     // Setup input
     InputManager *input = inputInit();
 
@@ -283,10 +341,19 @@ int main(void){
     long long startTime = millis();
     long long endTime = millis();
     long long elapsedTimeStart = millis();
+
+    //game.transitionState = 2;
+    //game.transitionAlpha = 255;
+    game.transitionState = 0;
+    game.transitionAlpha = 0;
+
+
     while (!WindowShouldClose()){
         endTime = millis();
         accumulatedTime += (endTime - startTime);
         startTime = millis();
+        shaderSeconds += GetFrameTime() / 2.0f;
+
 
         float mouseX = GetMouseX() * 2.0;
         float mouseY = GetMouseY() * 2.0;
@@ -299,133 +366,215 @@ int main(void){
             accumulatedTime -= timestep;
             float slowMotionFactor = 1.0f;
             float effectiveTimestep = (timeStep) * slowMotionFactor;
-            cpSpaceStep(space, effectiveTimestep / 2.0f);
-            cpSpaceStep(space, effectiveTimestep / 2.0f);
 
-            if (inputCenter(input)){
-                addBall(&game,89.5 - ballSize / 2,160,0,-220);
-            }
-            if (game.numBalls == 0){
-                addBall(&game,89.5 - ballSize / 2,160,0,-220);
-            }
-
-            if (IsMouseButtonPressed(0)){
-                addBall(&game,mouseX * screenToWorld,mouseY * screenToWorld,0,0);
-
-            }
-
-            float oldAngleLeft = leftFlipperAngle;
-            float oldAngleRight = rightFlipperAngle;
-            float targetAngleLeft = 0.0f;
-            float targetAngleRight = 0.0f;
-            if (inputLeft(input)){
-                targetAngleLeft = -33.0f;
-                leftFlipperAngle -= (flipperSpeed * effectiveTimestep);
-                if (leftFlipperAngle < targetAngleLeft){
-                    leftFlipperAngle = targetAngleLeft;
+            if (game.transitionState == 1){
+                game.transitionAlpha += 2;
+                if (game.transitionAlpha > 255){
+                    game.transitionState = 2;
+                    game.transitionAlpha = 255;
+                }
+            } else if (game.transitionState == 2){
+                game.transitionAlpha -= 2;
+                if (game.transitionAlpha < 0){
+                    game.transitionState = 0;
+                    game.transitionAlpha = 0;
                 }
             } else {
-                targetAngleLeft = 33.0f;
-                leftFlipperAngle += (flipperSpeed * effectiveTimestep);
-                if (leftFlipperAngle > targetAngleLeft){
-                    leftFlipperAngle = targetAngleLeft;
-                }
-            }
-            if (inputRight(input)){
-                targetAngleRight = 213.0f;
-                rightFlipperAngle += (flipperSpeed * effectiveTimestep);
-                if (rightFlipperAngle > targetAngleRight){
-                    rightFlipperAngle = targetAngleRight;
-                }
-            } else {
-                targetAngleRight = 147.0f;
-                rightFlipperAngle -= (flipperSpeed * effectiveTimestep);
-                if (rightFlipperAngle < targetAngleRight){
-                    rightFlipperAngle = targetAngleRight;
-                }
+                game.transitionAlpha = 0;
             }
 
-            float deltaAngularVelocityLeft = ((leftFlipperAngle * DEG_TO_RAD) - (oldAngleLeft * DEG_TO_RAD)) / effectiveTimestep;
-            float deltaAngularVelocityRight = ((rightFlipperAngle * DEG_TO_RAD) - (oldAngleRight * DEG_TO_RAD)) / effectiveTimestep;
-            cpBodySetAngle(leftFlipperBody,leftFlipperAngle * DEG_TO_RAD);
-            cpBodySetAngle(rightFlipperBody,rightFlipperAngle * DEG_TO_RAD);
-            cpBodySetAngularVelocity(leftFlipperBody,deltaAngularVelocityLeft * flipperSpeedScalar);
-            cpBodySetAngularVelocity(rightFlipperBody,deltaAngularVelocityRight * flipperSpeedScalar);
-            cpSpaceReindexShapesForBody(space,leftFlipperBody);
-            cpSpaceReindexShapesForBody(space,rightFlipperBody);
+            if (game.gameState == 0){
+                // Menu
 
-            // Check if any balls have fallen outside the screen
-            // Remove them if they have.
-            for (int i = 0; i < maxBalls; i++){
-                if (balls[i].active == 1){
-                    cpVect pos = cpBodyGetPosition(balls[i].body);
-                    if (pos.y > 170+ballSize){
-                        balls[i].active = 0;
-                        cpSpaceRemoveShape(game.space,balls[i].shape);
-                        cpSpaceRemoveBody(game.space,balls[i].body);
-                        cpShapeFree(balls[i].shape);
-                        cpBodyFree(balls[i].body);
-                        game.numBalls--;
+                // Update pinballs
+                for (int i = 0; i < 16; i++){
+                    menuPinballs[i].px += menuPinballs[i].vx;
+                    menuPinballs[i].py += menuPinballs[i].vy;
+                    menuPinballs[i].vy += 0.1f;
+                    if (menuPinballs[i].py > screenHeight + 20){
+                        menuPinballs[i].px = 228;
+                        menuPinballs[i].py = 126;
+                        menuPinballs[i].vx = ((rand() % 40) / 10.0f) - 2.0f;
+                        menuPinballs[i].vy = ((rand() % 50) / -10.0f);
                     }
                 }
-            }
 
-            // Update bumper
-            for (int i = 0; i < numBumpers; i++){
-                bumpers[i].bounceEffect *= 0.94;
+                if (inputCenterPressed(input)){
+                    game.gameState = 1;
+                    game.numLives = 3;
+                }
+            }
+            if (game.gameState == 1){
+                // Game
+                cpSpaceStep(space, effectiveTimestep / 2.0f);
+                cpSpaceStep(space, effectiveTimestep / 2.0f);
+
+                if (inputCenter(input)){
+                    //addBall(&game,89.5 - ballSize / 2,160,0,-220);
+                }
+                if (game.numBalls == 0){
+                    if (game.numLives > 0){
+                        addBall(&game,89.5 - ballSize / 2,160,0,-220);
+                        game.numLives -= 1;
+                    } else {
+                        // game over condition
+                        game.gameState = 0;
+                    }
+                }
+
+                //if (IsMouseButtonPressed(0)){
+                //    addBall(&game,mouseX * screenToWorld,mouseY * screenToWorld,0,0);
+                //}
+
+                float oldAngleLeft = leftFlipperAngle;
+                float oldAngleRight = rightFlipperAngle;
+                float targetAngleLeft = 0.0f;
+                float targetAngleRight = 0.0f;
+                if (inputLeft(input)){
+                    targetAngleLeft = -33.0f;
+                    leftFlipperAngle -= (flipperSpeed * effectiveTimestep);
+                    if (leftFlipperAngle < targetAngleLeft){
+                        leftFlipperAngle = targetAngleLeft;
+                    }
+                } else {
+                    targetAngleLeft = 33.0f;
+                    leftFlipperAngle += (flipperSpeed * effectiveTimestep);
+                    if (leftFlipperAngle > targetAngleLeft){
+                        leftFlipperAngle = targetAngleLeft;
+                    }
+                }
+                if (inputRight(input)){
+                    targetAngleRight = 213.0f;
+                    rightFlipperAngle += (flipperSpeed * effectiveTimestep);
+                    if (rightFlipperAngle > targetAngleRight){
+                        rightFlipperAngle = targetAngleRight;
+                    }
+                } else {
+                    targetAngleRight = 147.0f;
+                    rightFlipperAngle -= (flipperSpeed * effectiveTimestep);
+                    if (rightFlipperAngle < targetAngleRight){
+                        rightFlipperAngle = targetAngleRight;
+                    }
+                }
+
+                float deltaAngularVelocityLeft = ((leftFlipperAngle * DEG_TO_RAD) - (oldAngleLeft * DEG_TO_RAD)) / effectiveTimestep;
+                float deltaAngularVelocityRight = ((rightFlipperAngle * DEG_TO_RAD) - (oldAngleRight * DEG_TO_RAD)) / effectiveTimestep;
+                cpBodySetAngle(leftFlipperBody,leftFlipperAngle * DEG_TO_RAD);
+                cpBodySetAngle(rightFlipperBody,rightFlipperAngle * DEG_TO_RAD);
+                cpBodySetAngularVelocity(leftFlipperBody,deltaAngularVelocityLeft * flipperSpeedScalar);
+                cpBodySetAngularVelocity(rightFlipperBody,deltaAngularVelocityRight * flipperSpeedScalar);
+                cpSpaceReindexShapesForBody(space,leftFlipperBody);
+                cpSpaceReindexShapesForBody(space,rightFlipperBody);
+
+                // Check if any balls have fallen outside the screen
+                // Remove them if they have.
+                for (int i = 0; i < maxBalls; i++){
+                    if (balls[i].active == 1){
+                        cpVect pos = cpBodyGetPosition(balls[i].body);
+                        if (pos.y > 170+ballSize){
+                            balls[i].active = 0;
+                            cpSpaceRemoveShape(game.space,balls[i].shape);
+                            cpSpaceRemoveBody(game.space,balls[i].body);
+                            cpShapeFree(balls[i].shape);
+                            cpBodyFree(balls[i].body);
+                            game.numBalls--;
+                        }
+                    }
+                }
+
+                // Update bumper
+                for (int i = 0; i < numBumpers; i++){
+                    bumpers[i].bounceEffect *= 0.94;
+                }
             }
         }
 
         // RENDER AT SPEED GOVERNED BY RAYLIB
         BeginDrawing();
-        DrawTexturePro(bgTex,(Rectangle){0,0,bgTex.width,bgTex.height},(Rectangle){0,0,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
+        if (game.gameState == 0){
+            // Menu
+            ClearBackground((Color){255,183,0,255});
+            float timeFactor = (millis() - elapsedTimeStart) / 1000.0f;
+            float xOffset = sin(timeFactor) * 50.0f;
+            float yOffset = cos(timeFactor) * 50.0f;
+            float angle = sin(timeFactor * 2) * 20 + cos(timeFactor / 3) * 25;
+            float width = screenWidth * 3;
+            float height = screenHeight * 3;
+            SetShaderValue(swirlShader, secondsLoc, &shaderSeconds, UNIFORM_FLOAT);
+			BeginShaderMode(swirlShader);
+            DrawTexturePro(bgMenu,(Rectangle){0,0,bgMenu.width,bgMenu.height},(Rectangle){xOffset + screenWidth/2,yOffset + screenWidth/2,width,height},(Vector2){width/2,height/2},angle,WHITE);
+			EndShaderMode();
 
-        // Render balls
-        for (int i = 0; i < maxBalls; i++){
-            if (balls[i].active == 1){
-                cpVect pos = cpBodyGetPosition(balls[i].body);
-                DrawTexturePro(ballTex,(Rectangle){0,0,ballTex.width,ballTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,ballSize * worldToScreen,ballSize * worldToScreen},(Vector2){(ballSize / 2.0) * worldToScreen,(ballSize / 2.0) * worldToScreen},0,WHITE);
+            // Render pinballs
+            for (int i = 0; i < 16; i++){
+                DrawTexturePro(ballTex,(Rectangle){0,0,ballTex.width,ballTex.height},(Rectangle){menuPinballs[i].px,menuPinballs[i].py,30,30},(Vector2){0,0},0,WHITE);
             }
-        }
 
-        // Render bumpers
-        for (int i = 0; i < numBumpers; i++){
-            cpVect pos = cpBodyGetPosition(bumpers[i].body);
-            float bounceScale = 0.2f;
-            float width = bumperSize + cos(millis() / 20.0) * bumpers[i].bounceEffect * bounceScale;
-            float height = bumperSize + sin(millis() / 20.0) * bumpers[i].bounceEffect * bounceScale;
-            float shockSize = (bumperSize * bumpers[i].bounceEffect) * 0.15f;
-            DrawTexturePro(shockwaveTex,(Rectangle){0,0,shockwaveTex.width,shockwaveTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,shockSize * worldToScreen,shockSize * worldToScreen},(Vector2){shockSize/2 * worldToScreen,shockSize/2 * worldToScreen},0,WHITE);
-            DrawTexturePro(bumperTex,(Rectangle){0,0,bumperTex.width,bumperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,width * worldToScreen,height * worldToScreen},(Vector2){(width / 2.0) * worldToScreen,(height / 2.0) * worldToScreen},0,WHITE);
-        }
-
-        // Render left flipper
-        cpVect pos = cpBodyGetPosition(leftFlipperBody);
-        cpFloat angle = cpBodyGetAngle(leftFlipperBody);
-        DrawTexturePro(leftFlipperTex,(Rectangle){0,0,leftFlipperTex.width,leftFlipperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,flipperWidth * worldToScreen,flipperHeight * worldToScreen},(Vector2){0 * worldToScreen,0 * worldToScreen},(angle * RAD_TO_DEG),WHITE);
-        // Render right flipper
-        pos = cpBodyGetPosition(rightFlipperBody);
-        angle = cpBodyGetAngle(rightFlipperBody);
-        DrawTexturePro(rightFlipperTex,(Rectangle){0,0,rightFlipperTex.width,rightFlipperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,flipperWidth * worldToScreen,flipperHeight * worldToScreen},(Vector2){0 * worldToScreen,0 * worldToScreen},(angle * RAD_TO_DEG),WHITE);
-
-
-        // DEBUG RENDERING
-        if (IsKeyDown(KEY_TAB)){
-            DrawFPS(10, 10);
-
-            DrawLine(0,mouseY,screenWidth,mouseY,RED);
-            DrawLine(mouseX,0,mouseX,screenHeight,RED);
+            DrawTexturePro(menuOverlay1,(Rectangle){0,0,titleOverlay.width,titleOverlay.height},(Rectangle){0,0,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
+            DrawTexturePro(titleOverlay,(Rectangle){0,0,titleOverlay.width,titleOverlay.height},(Rectangle){0,12 + sin(timeFactor)*5.0f,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
+            //DrawTexturePro(arrowRight,(Rectangle){0,0,arrowRight.width,arrowRight.height},(Rectangle){16,600,32,32},(Vector2){16,16},180,WHITE);
+            //DrawTexturePro(arrowRight,(Rectangle){0,0,arrowRight.width,arrowRight.height},(Rectangle){screenWidth-16,600,32,32},(Vector2){16,16},0,WHITE);
+            //DrawTexturePro(arrowRight,(Rectangle){0,0,arrowRight.width,arrowRight.height},(Rectangle){screenWidth/2,screenHeight-16,32,32},(Vector2){16,16},90,WHITE);
             if (IsMouseButtonPressed(0)){
-                printf("{%f,%f,,},\n",(float)(mouseX * screenToWorld),(float)(mouseY * screenToWorld));
+                printf("{%f,%f}\n",(float)(mouseX),(float)(mouseY));
             }
 
-            for (int i = 0; i < numWalls; i++){
-                DrawLineEx((Vector2){walls[i][0]*worldToScreen,walls[i][1]*worldToScreen},(Vector2){walls[i][2]*worldToScreen,walls[i][3]*worldToScreen},1,GREEN);
-                DrawCircle(walls[i][0]*worldToScreen,walls[i][1]*worldToScreen,2,RED);
-                DrawCircle(walls[i][2]*worldToScreen,walls[i][3]*worldToScreen,2,RED);
+        }
+        if (game.gameState == 1){
+            // Game
+            DrawTexturePro(bgTex,(Rectangle){0,0,bgTex.width,bgTex.height},(Rectangle){0,0,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
+
+            // Render balls
+            for (int i = 0; i < maxBalls; i++){
+                if (balls[i].active == 1){
+                    cpVect pos = cpBodyGetPosition(balls[i].body);
+                    DrawTexturePro(ballTex,(Rectangle){0,0,ballTex.width,ballTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,ballSize * worldToScreen,ballSize * worldToScreen},(Vector2){(ballSize / 2.0) * worldToScreen,(ballSize / 2.0) * worldToScreen},0,WHITE);
+                }
             }
 
-            cpSpaceDebugDraw(space, &drawOptions);
+            // Render bumpers
+            for (int i = 0; i < numBumpers; i++){
+                cpVect pos = cpBodyGetPosition(bumpers[i].body);
+                float bounceScale = 0.2f;
+                float width = bumperSize + cos(millis() / 20.0) * bumpers[i].bounceEffect * bounceScale;
+                float height = bumperSize + sin(millis() / 20.0) * bumpers[i].bounceEffect * bounceScale;
+                float shockSize = (bumperSize * bumpers[i].bounceEffect) * 0.15f;
+                DrawTexturePro(shockwaveTex,(Rectangle){0,0,shockwaveTex.width,shockwaveTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,shockSize * worldToScreen,shockSize * worldToScreen},(Vector2){shockSize/2 * worldToScreen,shockSize/2 * worldToScreen},0,WHITE);
+                DrawTexturePro(bumperTex,(Rectangle){0,0,bumperTex.width,bumperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,width * worldToScreen,height * worldToScreen},(Vector2){(width / 2.0) * worldToScreen,(height / 2.0) * worldToScreen},0,WHITE);
+            }
+
+            // Render left flipper
+            cpVect pos = cpBodyGetPosition(leftFlipperBody);
+            cpFloat angle = cpBodyGetAngle(leftFlipperBody);
+            DrawTexturePro(leftFlipperTex,(Rectangle){0,0,leftFlipperTex.width,leftFlipperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,flipperWidth * worldToScreen,flipperHeight * worldToScreen},(Vector2){0 * worldToScreen,0 * worldToScreen},(angle * RAD_TO_DEG),WHITE);
+            // Render right flipper
+            pos = cpBodyGetPosition(rightFlipperBody);
+            angle = cpBodyGetAngle(rightFlipperBody);
+            DrawTexturePro(rightFlipperTex,(Rectangle){0,0,rightFlipperTex.width,rightFlipperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,flipperWidth * worldToScreen,flipperHeight * worldToScreen},(Vector2){0 * worldToScreen,0 * worldToScreen},(angle * RAD_TO_DEG),WHITE);
+
+
+            // DEBUG RENDERING
+            if (IsKeyDown(KEY_TAB)){
+                DrawFPS(10, 10);
+
+                DrawLine(0,mouseY,screenWidth,mouseY,RED);
+                DrawLine(mouseX,0,mouseX,screenHeight,RED);
+                if (IsMouseButtonPressed(0)){
+                    printf("{%f,%f,,},\n",(float)(mouseX * screenToWorld),(float)(mouseY * screenToWorld));
+                }
+
+                for (int i = 0; i < numWalls; i++){
+                    DrawLineEx((Vector2){walls[i][0]*worldToScreen,walls[i][1]*worldToScreen},(Vector2){walls[i][2]*worldToScreen,walls[i][3]*worldToScreen},1,GREEN);
+                    DrawCircle(walls[i][0]*worldToScreen,walls[i][1]*worldToScreen,2,RED);
+                    DrawCircle(walls[i][2]*worldToScreen,walls[i][3]*worldToScreen,2,RED);
+                }
+
+                cpSpaceDebugDraw(space, &drawOptions);
+            }
+        }
+
+        if (game.transitionState > 0){
+            DrawRectangle(0,0,screenWidth,screenHeight,(Color){255,255,255,game.transitionAlpha});
         }
 
         EndDrawing();
