@@ -47,7 +47,7 @@ enum CollisionTypes {
 };
 
 const int numWalls = 64;
-const int maxBalls = 16;
+const int maxBalls = 256;
 const float ballSize = 5;
 
 // Collision handlers
@@ -302,7 +302,7 @@ int main(void){
             cpSpaceStep(space, effectiveTimestep / 2.0f);
             cpSpaceStep(space, effectiveTimestep / 2.0f);
 
-            if (inputCenterPressed(input)){
+            if (inputCenter(input)){
                 addBall(&game,89.5 - ballSize / 2,160,0,-220);
             }
             if (game.numBalls == 0){
