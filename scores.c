@@ -21,9 +21,6 @@ ScoreHelper *initScores(){
         char *sql = "CREATE TABLE IF NOT EXISTS Score (id INTEGER PRIMARY KEY, name TEXT, score INTEGER);";
         rc = sqlite3_exec(helper->db, sql, NULL, NULL, NULL);
 
-        rc = sqlite3_prepare_v2(helper->db, "insert into Score(name,score) values (?,?)", -1, &helper->insertStatement, NULL);
-        printf("insert: %d\n",rc);
-
         // Blank scores with null score objects.
         for (int i = 0; i < 10; i++){
             helper->scores[i].scoreName = (char*) malloc(12*sizeof(char));
@@ -44,7 +41,6 @@ ScoreHelper *initScores(){
 
 void shutdownScores(ScoreHelper *helper){
     if (helper->initialized == 1){
-        sqlite3_finalize(helper->insertStatement);
         sqlite3_close(helper->db);
         helper->initialized = 0;
     }
@@ -53,9 +49,12 @@ void submitScore(ScoreHelper *helper, char *name, int score){
     if (helper->initialized == 1){
         // invalidate scores
         helper->scoresUpdated = 0;
+        int rc = sqlite3_prepare_v2(helper->db, "insert into Score(name,score) values (?,?)", -1, &helper->insertStatement, NULL);
+        printf("insert: %d\n",rc);
         sqlite3_bind_text(helper->insertStatement, 1, name, -1, SQLITE_TRANSIENT);
         sqlite3_bind_int(helper->insertStatement, 2, score);
-        int rc = sqlite3_step(helper->insertStatement);
+        rc = sqlite3_step(helper->insertStatement);
+        sqlite3_finalize(helper->insertStatement);
         printf("submitted score status = %d\n",rc);
     }
 }

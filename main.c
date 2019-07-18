@@ -35,6 +35,12 @@ typedef struct {
     GameStruct *game;
 } Ball;
 
+typedef enum {
+    TRANSITION_TO_MENU,
+    TRANSITION_TO_GAME,
+    TRANSITION_GAME_OVER
+} TransitionAction;
+
 typedef struct {
     cpShape *shape;
     cpBody *body;
@@ -49,9 +55,12 @@ typedef struct GameStructData {
     int gameState;
     int gameScore;
     int transitionState;
+    int transitionDelay;
+    TransitionAction transitionTarget;
     float transitionAlpha;
     int numLives;
     int menuState;
+    int nameSelectIndex;
 } GameStruct;
 
 typedef struct {
@@ -204,10 +213,13 @@ int main(void){
     Texture bgMenu = LoadTexture("Resources/Textures/bgMenu.png");
     Texture titleOverlay = LoadTexture("Resources/Textures/titleOverlay.png");
     Texture menuOverlay1 = LoadTexture("Resources/Textures/menuOverlay1.png");
+    Texture gameOverOverlay1 = LoadTexture("Resources/Textures/gameOverOverlay1.png");
     Texture arrowRight = LoadTexture("Resources/Textures/arrowRight.png");
     Texture menuControls = LoadTexture("Resources/Textures/menuControls.png");
+    Texture transitionTex = LoadTexture("Resources/Textures/transition.png");
 
     Font font1 = LoadFontEx("Resources/Fonts/Avenir-Black.ttf",80,0,0);
+    Font font2 = LoadFontEx("Resources/Fonts/Avenir-Black.ttf",120,0,0);
 
     Shader swirlShader = LoadShader(0, FormatText("Resources/Shaders/glsl%i/wave.fs", GLSL_VERSION));
     int secondsLoc = GetShaderLocation(swirlShader, "secondes");
@@ -355,14 +367,16 @@ int main(void){
     long long endTime = millis();
     long long elapsedTimeStart = millis();
 
-    //game.transitionState = 2;
-    //game.transitionAlpha = 255;
     game.transitionState = 0;
     game.transitionAlpha = 0;
+    game.transitionTarget = TRANSITION_TO_MENU;
 
     game.menuState = 0;
+    game.gameState = 2;
 
     char tempString[128];
+    char nameString[6];
+    sprintf(nameString,"-----");
 
 
     while (!WindowShouldClose()){
@@ -384,20 +398,60 @@ int main(void){
             float slowMotionFactor = 1.0f;
             float effectiveTimestep = (timeStep) * slowMotionFactor;
 
+            //printf("%d %f %d\n",game.transitionState,game.transitionAlpha,game.transitionTarget);
             if (game.transitionState == 1){
-                game.transitionAlpha += 2;
-                if (game.transitionAlpha > 255){
+                // TRANSITION OUT
+                game.transitionAlpha += 15;
+                if (game.transitionAlpha >= 255){
                     game.transitionState = 2;
                     game.transitionAlpha = 255;
+                    game.transitionDelay = 0;
                 }
             } else if (game.transitionState == 2){
-                game.transitionAlpha -= 2;
-                if (game.transitionAlpha < 0){
+                // HANDLE LOAD
+                switch (game.transitionTarget){
+                    case TRANSITION_TO_GAME: {
+                        game.gameState = 1;
+                        game.numLives = 3;
+                        game.gameScore = 0;
+                        printf("Transition to game\n");
+                        break;
+                    }
+                    case TRANSITION_TO_MENU: {
+                        game.gameState = 0;
+                        printf("Transition to menu\n");
+                        break;
+                    }
+                    case TRANSITION_GAME_OVER: {
+                        game.gameState = 2;
+                        game.nameSelectIndex = 0;
+                        printf("Transition to game over\n");
+                        break;
+                    }
+                    default: {
+                        printf("Unknown transition\n");
+                    }
+                }
+                game.transitionDelay++;
+                if (game.transitionDelay > 10){
+                    game.transitionState = 3;
+                }
+            } else if (game.transitionState == 3){
+                //TRANSITION IN
+                game.transitionAlpha -= 15;
+                if (game.transitionAlpha <= 0){
                     game.transitionState = 0;
                     game.transitionAlpha = 0;
                 }
             } else {
                 game.transitionAlpha = 0;
+            }
+            if (game.gameState == 5){
+                //transition from raylib title to menu
+                if (game.transitionState == 0){
+                    game.transitionState = 1;
+                    game.transitionTarget = TRANSITION_TO_MENU;
+                }
             }
 
             if (game.gameState == 0){
@@ -417,9 +471,8 @@ int main(void){
                 }
 
                 if (inputCenterPressed(input)){
-                    game.gameState = 1;
-                    game.numLives = 3;
-                    game.gameScore = 0;
+                    game.transitionState = 1;
+                    game.transitionTarget = TRANSITION_TO_GAME;
                 }
 
                 if (inputLeftPressed(input)){
@@ -443,10 +496,13 @@ int main(void){
                         game.numLives -= 1;
                     } else {
                         // game over condition
-                        game.gameState = 0;
+                        if (game.transitionState == 0){
+                            game.transitionState = 1;
+                            game.transitionTarget = TRANSITION_GAME_OVER;
+                        }
                         // Test: Submit score
-                        submitScore(scores,"DALK",game.gameScore);
-                        printf("Game Over. score: %d\n",game.gameScore);
+                        //submitScore(scores,"DALK",game.gameScore);
+                        //printf("Game Over. score: %d\n",game.gameScore);
                     }
                 }
 
@@ -515,6 +571,42 @@ int main(void){
                     bumpers[i].bounceEffect *= 0.94;
                 }
             }
+            if (game.gameState == 2){
+                // Game over
+                if (inputRightPressed(input)){
+                    game.nameSelectIndex++;
+                    if (game.nameSelectIndex > 5){
+                        game.nameSelectIndex = 0;
+                    }
+                }
+                if (inputLeftPressed(input)){
+                    game.nameSelectIndex--;
+                    if (game.nameSelectIndex < 0){
+                        game.nameSelectIndex = 5;
+                    }
+                }
+                if (inputCenterPressed(input)){
+                    if (game.nameSelectIndex == 5){
+                        // Name selection done
+                    } else {
+                        if (game.nameSelectIndex > 0){
+                            while (game.nameSelectIndex-1 >= 0 && nameString[game.nameSelectIndex-1] == 45){
+                                game.nameSelectIndex--;
+                            }
+                        }
+                        if (nameString[game.nameSelectIndex] < 65 || nameString[game.nameSelectIndex] > 90){
+                            nameString[game.nameSelectIndex] = 65;
+                        } else {
+                            nameString[game.nameSelectIndex] = (nameString[game.nameSelectIndex] + 1);
+                            if (nameString[game.nameSelectIndex] > 90){
+                                nameString[game.nameSelectIndex] = 45;
+                            } else if (nameString[game.nameSelectIndex] < 65){
+                                nameString[game.nameSelectIndex] = 90;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // RENDER AT SPEED GOVERNED BY RAYLIB
@@ -531,7 +623,7 @@ int main(void){
             SetShaderValue(swirlShader, secondsLoc, &shaderSeconds, UNIFORM_FLOAT);
 			BeginShaderMode(swirlShader);
             DrawTexturePro(bgMenu,(Rectangle){0,0,bgMenu.width,bgMenu.height},(Rectangle){xOffset + screenWidth/2,yOffset + screenWidth/2,width,height},(Vector2){width/2,height/2},angle,WHITE);
-			EndShaderMode();
+            EndShaderMode();
 
             // Render pinballs
             for (int i = 0; i < 16; i++){
@@ -552,7 +644,7 @@ int main(void){
                 float y = 362;
                 for (int i = 1; i <= 10; i++){
                     ScoreObject *score = getRankedScore(scores,i);
-                    float fontSize = 44.0 - (i * 3.25);
+                    float fontSize = 27.0;// - (i * 3.25);
                     if (fontSize < 18.0){
                         fontSize = 18.0;
                     }
@@ -562,8 +654,12 @@ int main(void){
                         DrawTextEx(font1, tempString, (Vector2){66 - MeasureTextEx(font1, tempString, fontSize, 1.0).x,y}, fontSize, 1.0, textColor);
                         sprintf(tempString,"%s",score->scoreName);
                         DrawTextEx(font1, tempString, (Vector2){75,y}, fontSize, 1.0, textColor);
+                        float scoreNameWidth = MeasureTextEx(font1, tempString, fontSize, 1.0).x;
                         sprintf(tempString,"%d",score->scoreValue);
-                        DrawTextEx(font1, tempString, (Vector2){404 - MeasureTextEx(font1, tempString, fontSize, 1.0).x,y}, fontSize, 1.0, textColor);
+                        float scoreValueWidth = MeasureTextEx(font1, tempString, fontSize, 1.0).x;
+                        DrawTextEx(font1, tempString, (Vector2){404 - scoreValueWidth,y}, fontSize, 1.0, textColor);
+                        float lineY = y + fontSize / 2.0f - 1.0f;
+                        DrawLineEx((Vector2){75 + (scoreNameWidth + 10),lineY}, (Vector2){404 - (scoreValueWidth + 10),lineY}, 2, (Color){255,255,255,50});
                     } else {
                         textColor = GRAY;
                         sprintf(tempString,"%d)",i);
@@ -633,9 +729,49 @@ int main(void){
                 cpSpaceDebugDraw(space, &drawOptions);
             }
         }
+        if (game.gameState == 2){
+            ClearBackground((Color){255,183,0,255});
+            float timeFactor = (millis() - elapsedTimeStart) / 1000.0f;
+            float xOffset = sin(timeFactor) * 50.0f;
+            float yOffset = cos(timeFactor) * 50.0f;
+            float angle = sin(timeFactor * 2) * 20 + cos(timeFactor / 3) * 25;
+            float width = screenWidth * 3;
+            float height = screenHeight * 3;
+            SetShaderValue(swirlShader, secondsLoc, &shaderSeconds, UNIFORM_FLOAT);
+			BeginShaderMode(swirlShader);
+            DrawTexturePro(bgMenu,(Rectangle){0,0,bgMenu.width,bgMenu.height},(Rectangle){xOffset + screenWidth/2,yOffset + screenWidth/2,width,height},(Vector2){width/2,height/2},angle,WHITE);
+            EndShaderMode();
+            DrawTexturePro(gameOverOverlay1,(Rectangle){0,0,titleOverlay.width,titleOverlay.height},(Rectangle){0,0,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
+
+            //DrawTexturePro(titleOverlay,(Rectangle){0,0,titleOverlay.width,titleOverlay.height},(Rectangle){0,12 + sin(timeFactor)*5.0f,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
+            //DrawTextEx(font1, "Score: ", (Vector2){x,y}, 40, 1.0, textColor);
+            //DrawTextEx(font1, "Enter Name", (Vector2){x,y}, 40, 1.0, textColor);
+            for (int i =0; i < 5; i++){
+                sprintf(tempString,"%c",nameString[i]);
+                float textWidth = MeasureTextEx(font2, tempString, 60, 1.0).x;
+                if (nameString[i] == 45){
+                    DrawTextEx(font2, tempString, (Vector2){54 + (i * 62) - textWidth / 2,510}, 60, 1.0, DARKGRAY);
+                } else {
+                    DrawTextEx(font2, tempString, (Vector2){54 + (i * 62) - textWidth / 2,510}, 60, 1.0, WHITE);
+                }
+            }
+            DrawTexturePro(arrowRight,(Rectangle){0,0,arrowRight.width,arrowRight.height},(Rectangle){54 + (game.nameSelectIndex * 62),595+ (5 * sin((millis()-elapsedTimeStart)/200.0f)),32,32},(Vector2){16,16},-90,WHITE);
+
+        }
+        if (game.gameState == 5){
+            ClearBackground(WHITE);
+        }
 
         if (game.transitionState > 0){
-            DrawRectangle(0,0,screenWidth,screenHeight,(Color){255,255,255,game.transitionAlpha});
+            //DrawRectangle(0,0,screenWidth,screenHeight,(Color){255,255,255,game.transitionAlpha});
+            SetShaderValue(swirlShader, secondsLoc, &shaderSeconds, UNIFORM_FLOAT);
+			//BeginShaderMode(swirlShader);
+            float transitionAmount = ((game.transitionAlpha / 255.0f));
+            DrawRectanglePro((Rectangle){screenWidth,screenHeight,screenWidth,screenHeight + 200}, (Vector2){0,screenHeight + 200}, -33.0f * transitionAmount, BLACK);
+            DrawRectanglePro((Rectangle){0,0,screenWidth,screenHeight + 200}, (Vector2){screenWidth,0}, -33.0f * transitionAmount, BLACK);
+            //DrawLineEx((Vector2){0,0},(Vector2){screenWidth * transitionAmount,screenHeight},4,WHITE);
+            //DrawLineEx((Vector2){0,screenWidth * transitionAmount},(Vector2){screenWidth,screenHeight},4,WHITE);
+            //EndShaderMode();
         }
 
         EndDrawing();
