@@ -36,6 +36,7 @@ typedef struct {
     float locationHistoryX[16];
     float locationHistoryY[16];
     int trailStartIndex;
+    int type;
 } Ball;
 
 typedef enum {
@@ -57,6 +58,8 @@ typedef struct GameStructData {
     int active;
     int gameState;
     int gameScore;
+    int powerupScore;
+    int powerupScoreDisplay;
     int transitionState;
     int transitionDelay;
     TransitionAction transitionTarget;
@@ -81,7 +84,7 @@ enum CollisionTypes {
     COLLISION_PADDLE = 3
 };
 
-const int numWalls = 64;
+const int numWalls = 128;
 const int maxBalls = 256;
 const float ballSize = 5;
 
@@ -94,6 +97,7 @@ static cpBool CollisionHandlerBallBumper(cpArbiter *arb, cpSpace *space, void *i
     // On the bumper object, set the collision effect
     bumper->bounceEffect = 10.0f;
     (ball->game)->gameScore += 100;
+    (ball->game)->powerupScore += 100;
 
     // On the ball object, add a random velocity
     //cpBodyApplyImpulseAtLocalPoint(ball->body,cpv(rand() % 20 - 10, rand() % 20 - 10),cpvzero);
@@ -102,7 +106,7 @@ static cpBool CollisionHandlerBallBumper(cpArbiter *arb, cpSpace *space, void *i
 }
 
 // Add ball function
-void addBall(GameStruct *game, float px, float py, float vx, float vy){
+void addBall(GameStruct *game, float px, float py, float vx, float vy,int type){
     if (game->numBalls < maxBalls){
         game->numBalls++;
         // Find the first index that isn't active
@@ -115,6 +119,9 @@ void addBall(GameStruct *game, float px, float py, float vx, float vy){
         }
 
         float radius = ballSize / 2.0;
+        if (type == 1){
+            //radius = 1.0;
+        }
         float mass = 1.0;
         cpFloat moment = cpMomentForCircle(mass, 0, radius, cpvzero);
         game->balls[ballIndex].body = cpSpaceAddBody(game->space,cpBodyNew(mass,moment));
@@ -128,6 +135,7 @@ void addBall(GameStruct *game, float px, float py, float vx, float vy){
         game->balls[ballIndex].active = 1;
         game->balls[ballIndex].game = game;
         game->balls[ballIndex].trailStartIndex = 0;
+        game->balls[ballIndex].type = type;
 
         for (int i = 0; i< 16; i++){
             game->balls[ballIndex].locationHistoryX[i] = px;
@@ -160,6 +168,7 @@ void writeCircleWallSegment(float walls[numWalls][4],int segmentIndex,int numSeg
     }
 }
 
+
 // Debug drawing functions
 static void
 ChipmunkDebugDrawCirclePointer(cpVect p, cpFloat a, cpFloat r, cpSpaceDebugColor outline, cpSpaceDebugColor fill, cpDataPointer data)
@@ -182,6 +191,15 @@ ChipmunkDebugDrawDotPointer(cpFloat size, cpVect pos, cpSpaceDebugColor color, c
 {ChipmunkDebugDrawDot(size, pos, color);}
 
 
+// start game
+void startGame(GameStruct *game){
+    game->gameState = 1;
+    game->numLives = 3;
+    game->gameScore = 0;
+    game->powerupScore = 0;
+    game->powerupScoreDisplay = 0;
+}
+
 int main(void){
 
     // Initialize a struct encoding data about the game.
@@ -189,7 +207,7 @@ int main(void){
     game.gameState = 0;
 
 
-    float walls[64][4] = {
+    float walls[128][4] = {
         {0,0,worldWidth,0},
         {0,0,0,worldHeight},
         {worldWidth,0,worldWidth,worldHeight},
@@ -201,15 +219,25 @@ int main(void){
         {0,2.1,worldWidth,2.1},
         {40.4,1.6,41.2,4.0},
         {41.2,4.0,65.2,1.6},
+        {69.2,16.4,60.4,43.2},
+        {60.4,43.2,68.8,55.6},
+        {74.8,63.6,83.2,76.0},
+        {84.0,56.7,84.0,37.2},
+        {70.8,18.4,68,26.8},
+        {74.8,37.6,68.8,55.6},
+        {82.0,39.2,74.8,63.6}
     };
-    writeCircleWallSegment(walls,11,20,0,90,worldWidth-28.5,30.75,28.75);
-    writeCircleWallSegment(walls,31,20,270,360,28.5,30.75,28.75);
+    writeCircleWallSegment(walls,18,20,0,90,worldWidth-28.5,30.75,28.75);
+    writeCircleWallSegment(walls,38,20,270,360,28.5,30.75,28.75);
+    writeCircleWallSegment(walls,58,10,20,110,64.75,35.6,10.15);
+    writeCircleWallSegment(walls,68,10,20,110,64.75,35.6,17.50);
+    writeCircleWallSegment(walls,78,10,13,110,64.75,35.6,19.50);
 
     InitAudioDevice();
     Sound sound = LoadSound("Resources/Audio/1.mp3");
     PlaySound(sound);
 
-    SetConfigFlags(FLAG_SHOW_LOGO | FLAG_VSYNC_HINT);
+    //SetConfigFlags(FLAG_SHOW_LOGO | FLAG_VSYNC_HINT);
     InitWindow(screenWidth, screenHeight, "Mini Pinball by Chris Dalke!");
     SetTargetFPS(60);
 
@@ -229,9 +257,13 @@ int main(void){
     Texture arrowRight = LoadTexture("Resources/Textures/arrowRight.png");
     Texture menuControls = LoadTexture("Resources/Textures/menuControls.png");
     Texture transitionTex = LoadTexture("Resources/Textures/transition.png");
+    Texture waterTex = LoadTexture("Resources/Textures/waterTex.png");
+    Texture particleTex = LoadTexture("Resources/Textures/particle.png");
 
     Font font1 = LoadFontEx("Resources/Fonts/Avenir-Black.ttf",80,0,0);
     Font font2 = LoadFontEx("Resources/Fonts/Avenir-Black.ttf",120,0,0);
+
+    Shader alphaTestShader = LoadShader(0, FormatText("resources/shaders/glsl%i/alphaTest.fs", GLSL_VERSION));
 
     Shader swirlShader = LoadShader(0, FormatText("Resources/Shaders/glsl%i/wave.fs", GLSL_VERSION));
     int secondsLoc = GetShaderLocation(swirlShader, "secondes");
@@ -333,6 +365,11 @@ int main(void){
     float rightFlipperAngle = 147.0f;
     float flipperSpeedScalar = 1.0f;
 
+    // Powerup variables
+    float powerupFullY = 64.0f;
+    float powerupEmptyY = 104.4f;
+    float powerupTargetScore = 5000.0f;
+
     //create balls array
     Ball* balls = malloc(maxBalls * sizeof(Ball));
     game.balls = balls;
@@ -340,6 +377,10 @@ int main(void){
     for (int i = 0; i < maxBalls; i++){
         balls[i].active = 0;
     }
+
+    // Setup render texture for special ball effect
+    RenderTexture2D renderTarget = LoadRenderTexture(screenWidth, screenHeight);
+
 
     // Setup debug draw options
     cpSpaceDebugDrawOptions drawOptions = {
@@ -402,10 +443,11 @@ int main(void){
         accumulatedTime += (endTime - startTime);
         startTime = millis();
         shaderSeconds += GetFrameTime() / 2.0f;
+        SetShaderValue(swirlShader, secondsLoc, &shaderSeconds, UNIFORM_FLOAT);
 
 
-        float mouseX = GetMouseX() * 2.0;
-        float mouseY = GetMouseY() * 2.0;
+        float mouseX = GetMouseX();
+        float mouseY = GetMouseY();
 
         // Poll input
         inputUpdate(input);
@@ -427,9 +469,7 @@ int main(void){
                 // HANDLE LOAD
                 switch (game.transitionTarget){
                     case TRANSITION_TO_GAME: {
-                        game.gameState = 1;
-                        game.numLives = 3;
-                        game.gameScore = 0;
+                        startGame(&game);
                         printf("Transition to game\n");
                         break;
                     }
@@ -512,7 +552,7 @@ int main(void){
                 }
                 if (game.numBalls == 0){
                     if (game.numLives > 0){
-                        addBall(&game,89.5 - ballSize / 2,160,0,-220);
+                        addBall(&game,89.5 - ballSize / 2,160,0,-220,0);
                         game.numLives -= 1;
                     } else {
                         // game over condition
@@ -526,8 +566,12 @@ int main(void){
                     }
                 }
 
-                if (IsMouseButtonPressed(0)){
-                    addBall(&game,mouseX * screenToWorld,mouseY * screenToWorld,0,0);
+                if (IsMouseButtonDown(0)){
+                    for (int x = -2; x <= 2; x++){
+                        for (int y = -2; y <=2; y++){
+                            addBall(&game,(mouseX + x*2) * screenToWorld,(mouseY + y*ballSize) * screenToWorld,0,0,1);
+                        }
+                    }
                 }
 
                 float oldAngleLeft = leftFlipperAngle;
@@ -587,7 +631,6 @@ int main(void){
                 }
 
                 //Update ball trails
-                printf("updating ball trails\n");
                 for (int i = 0; i < maxBalls; i++){
                     if (balls[i].active == 1){
                         cpVect pos = cpBodyGetPosition(balls[i].body);
@@ -597,9 +640,39 @@ int main(void){
                     }
                 }
 
+                // For any metaballs, apply downward force
+                for (int i = 0; i < maxBalls; i++){
+                    if (balls[i].active == 1 && balls[i].type == 1){
+                        cpVect pos = cpBodyGetPosition(balls[i].body);
+                        cpBodyApplyImpulseAtLocalPoint (balls[i].body, cpv(0,10.0), cpvzero);
+                    }
+                }
+
                 // Update bumper
                 for (int i = 0; i < numBumpers; i++){
                     bumpers[i].bounceEffect *= 0.94;
+                }
+
+                // Update powerup score display
+                if (game.powerupScoreDisplay < game.powerupScore){
+                    game.powerupScoreDisplay += 4;
+                } else if (game.powerupScoreDisplay > game.powerupScore){
+                    game.powerupScoreDisplay -= 10;
+                }
+                if (game.powerupScoreDisplay < 0){
+                    game.powerupScoreDisplay = 0;
+                }
+                // If the powerup is full, dispense powerup
+                if (game.powerupScoreDisplay >= powerupTargetScore){
+                    game.powerupScore = 0;
+                    //for (int i =0; i < 16; i++){
+                        //addBall(&game,89.5 - ballSize / 2,160 - (i * ballSize),0,-220,1);
+                    //}
+                    for (int x = -1; x <= 1; x++){
+                        for (int y = -1; y <=1; y++){
+                            addBall(&game,(screenWidth/2 + x*2) * screenToWorld,(screenHeight/2 + y*ballSize) * screenToWorld,0,0,1);
+                        }
+                    }
                 }
             }
             if (game.gameState == 2){
@@ -659,7 +732,6 @@ int main(void){
             float angle = sin(timeFactor * 2) * 20 + cos(timeFactor / 3) * 25;
             float width = screenWidth * 3;
             float height = screenHeight * 3;
-            SetShaderValue(swirlShader, secondsLoc, &shaderSeconds, UNIFORM_FLOAT);
 			BeginShaderMode(swirlShader);
             DrawTexturePro(bgMenu,(Rectangle){0,0,bgMenu.width,bgMenu.height},(Rectangle){xOffset + screenWidth/2,yOffset + screenWidth/2,width,height},(Vector2){width/2,height/2},angle,WHITE);
             EndShaderMode();
@@ -715,11 +787,26 @@ int main(void){
         }
         if (game.gameState == 1){
             // Game
+            ClearBackground((Color){40,1,42,255});
+
+            // Draw powerup status under game background
+            float powerupProportion = game.powerupScoreDisplay / powerupTargetScore;
+            if (powerupProportion > 1.0f){
+                powerupProportion = 1.0f;
+            }
+            float powerupHeight = (powerupEmptyY - powerupFullY) * 2;
+            float powerupY = powerupFullY - (powerupProportion * powerupHeight / 2.0f);
+            BeginShaderMode(swirlShader);
+            DrawTexturePro(waterTex,(Rectangle){0,0,waterTex.width,waterTex.height},(Rectangle){30 * worldToScreen,powerupY* worldToScreen,powerupHeight* worldToScreen,powerupHeight* worldToScreen},(Vector2){0,0},0,WHITE);
+
+            EndShaderMode();
+
+
             DrawTexturePro(bgTex,(Rectangle){0,0,bgTex.width,bgTex.height},(Rectangle){0,0,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
 
-            // Render balls
+            // Render ball trails
             for (int i = 0; i < maxBalls; i++){
-                if (balls[i].active == 1){
+                if (balls[i].active == 1 && balls[i].type == 0){
                     // Render trails
 
                     //printf("rendiner ball trails\n");
@@ -732,11 +819,35 @@ int main(void){
                         float trailSize = ballSize * sqrt(ii/16.0f);
                         DrawTexturePro(trailTex,(Rectangle){0,0,trailTex.width,trailTex.height},(Rectangle){balls[i].locationHistoryX[index] * worldToScreen,balls[i].locationHistoryY[index] * worldToScreen,trailSize * worldToScreen,trailSize * worldToScreen},(Vector2){(trailSize / 2.0) * worldToScreen,(trailSize / 2.0) * worldToScreen},0,WHITE);
                     }
-                    //Render ball
-                    cpVect pos = cpBodyGetPosition(balls[i].body);
-                    DrawTexturePro(ballTex,(Rectangle){0,0,ballTex.width,ballTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,ballSize * worldToScreen,ballSize * worldToScreen},(Vector2){(ballSize / 2.0) * worldToScreen,(ballSize / 2.0) * worldToScreen},0,WHITE);
                 }
             }
+            //render normal balls
+            for (int i = 0; i < maxBalls; i++){
+                if (balls[i].active == 1){
+                    //Render ball
+                    cpVect pos = cpBodyGetPosition(balls[i].body);
+                    if (balls[i].type == 0){
+                        DrawTexturePro(ballTex,(Rectangle){0,0,ballTex.width,ballTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,ballSize * worldToScreen,ballSize * worldToScreen},(Vector2){(ballSize / 2.0) * worldToScreen,(ballSize / 2.0) * worldToScreen},0,WHITE);
+                    }
+                }
+            }
+            printf("%d %d\n",GetScreenWidth(),GetScreenHeight());
+            // Render special balls
+            BeginTextureMode(renderTarget);
+            DrawRectangle(0,0,screenWidth,screenHeight,(Color){0,0,0,50});
+            BeginBlendMode(BLEND_ADDITIVE);
+            //ClearBackground((Color){0,0,0,10});
+            for (int i = 0; i < maxBalls; i++){
+                if (balls[i].active == 1){
+                    //Render ball
+                    cpVect pos = cpBodyGetPosition(balls[i].body);
+                    if (balls[i].type == 1){
+                        DrawTexturePro(particleTex,(Rectangle){0,0,particleTex.width,particleTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,ballSize * worldToScreen * 2,ballSize * worldToScreen * 2},(Vector2){(ballSize * 2 / 2.0) * worldToScreen,(ballSize * 2 / 2.0) * worldToScreen},0,WHITE);
+                    }
+                }
+            }
+            EndBlendMode();
+            EndTextureMode();
 
             // Render bumpers
             for (int i = 0; i < numBumpers; i++){
@@ -758,9 +869,14 @@ int main(void){
             angle = cpBodyGetAngle(rightFlipperBody);
             DrawTexturePro(rightFlipperTex,(Rectangle){0,0,rightFlipperTex.width,rightFlipperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,flipperWidth * worldToScreen,flipperHeight * worldToScreen},(Vector2){0 * worldToScreen,0 * worldToScreen},(angle * RAD_TO_DEG),WHITE);
 
-            sprintf(tempString,"%d)",game.gameScore);
+            //sprintf(tempString,"%d)",game.gameScore);
             //DrawTextEx(font1, tempString, (Vector2){screenWidth/2,screenHeight/2}, 30, 1.0, WHITE);
 
+            // Render special ball render target
+            //DrawTextureRec(renderTarget.texture, (Rectangle){ 0, 0, screenWidth, screenHeight}, (Vector2){ 0, 0 }, WHITE);
+            BeginShaderMode(alphaTestShader);
+            DrawTextureRec(renderTarget.texture, (Rectangle){ 0, 0, renderTarget.texture.width, -renderTarget.texture.height }, (Vector2){ 0, 0 }, WHITE);
+            EndShaderMode();
 
             // DEBUG RENDERING
             if (IsKeyDown(KEY_TAB)){
