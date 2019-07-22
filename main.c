@@ -696,7 +696,7 @@ int main(void){
                     //addBall(&game,89.5 - ballSize / 2,160,0,-220);
                 }
                 if (game.numBalls == 0){
-                    inputSetNumBalls(input,game.numBalls);
+                    inputSetNumBalls(input,game.numLives);
                     if (game.numLives > 0){
                         addBall(&game,89.5 - ballSize / 2,160,0,-220,0);
                         game.numLives -= 1;
@@ -935,6 +935,7 @@ int main(void){
                             game.transitionTarget = TRANSITION_TO_MENU;
                             submitScore(scores,nameString,game.gameScore);
                             printf("Game Over. score: %ld\n",game.gameScore);
+                            inputSetGameState(input,STATE_MENU);
                         } else {
                             if (game.nameSelectIndex > 0){
                                 while (game.nameSelectIndex-1 >= 0 && nameString[game.nameSelectIndex-1] == 32){
