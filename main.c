@@ -62,6 +62,7 @@ typedef struct GameStructData {
     int active;
     int gameState;
     long gameScore;
+    long oldGameScore;
     int powerupScore;
     int powerupScoreDisplay;
     int transitionState;
@@ -112,7 +113,6 @@ static cpBool CollisionHandlerLeftLowerBumper(cpArbiter *arb, cpSpace *space, vo
     leftLowerBumperAnim = 1.0f;
     (ball->game)->gameScore += 50;
     (ball->game)->powerupScore += 50;
-    inputSetScore((ball->game)->input,(ball->game)->gameScore);
     return cpTrue;
 }
 static cpBool CollisionHandlerRightLowerBumper(cpArbiter *arb, cpSpace *space, void *ignore){
@@ -121,7 +121,6 @@ static cpBool CollisionHandlerRightLowerBumper(cpArbiter *arb, cpSpace *space, v
     rightLowerBumperAnim = 1.0f;
     (ball->game)->gameScore += 100;
     (ball->game)->powerupScore += 100;
-    inputSetScore((ball->game)->input,(ball->game)->gameScore);
     return cpTrue;
 }
 static cpBool CollisionHandlerBallFlipper(cpArbiter *arb, cpSpace *space, void *ignore){
@@ -158,7 +157,6 @@ static cpBool CollisionHandlerBallBumper(cpArbiter *arb, cpSpace *space, void *i
         (ball->game)->powerupScore += 500;
         bumper->enabled = 0;
     }
-    inputSetScore((ball->game)->input,(ball->game)->gameScore);
 
 	return cpFalse;
 }
@@ -691,6 +689,11 @@ int main(void){
                 cpSpaceStep(space, effectiveTimestep / 3.0f);
                 cpSpaceStep(space, effectiveTimestep / 3.0f);
                 cpSpaceStep(space, effectiveTimestep / 3.0f);
+
+                if (game.oldGameScore != game.gameScore){
+                    inputSetScore(input,game.gameScore);
+                    game.oldGameScore = game.gameScore;
+                }
 
                 if (inputCenter(input)){
                     //addBall(&game,89.5 - ballSize / 2,160,0,-220);
