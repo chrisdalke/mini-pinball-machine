@@ -262,7 +262,7 @@ void startGame(GameStruct *game){
     game->powerupScoreDisplay = 0;
     inputSetScore(game->input,0);
     inputSetGameState(game->input,STATE_GAME);
-    inputSetNumBalls(game->input,game.numLives);
+    inputSetNumBalls(game->input,game->numLives);
 }
 
 int main(void){
