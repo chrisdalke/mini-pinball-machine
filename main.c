@@ -262,6 +262,7 @@ void startGame(GameStruct *game){
     game->powerupScoreDisplay = 0;
     inputSetScore(game->input,0);
     inputSetGameState(game->input,STATE_GAME);
+    inputSetNumBalls(game->input,game.numLives);
 }
 
 int main(void){
@@ -700,10 +701,10 @@ int main(void){
                     //addBall(&game,89.5 - ballSize / 2,160,0,-220);
                 }
                 if (game.numBalls == 0){
-                    inputSetNumBalls(input,game.numLives);
                     if (game.numLives > 1){
                         game.numLives -= 1;
                         addBall(&game,89.5 - ballSize / 2,160,0,-220,0);
+                        inputSetNumBalls(input,game.numLives);
                     } else {
                         // game over condition
                         if (game.transitionState == 0){
