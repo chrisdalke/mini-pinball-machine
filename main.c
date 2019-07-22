@@ -37,6 +37,7 @@ typedef struct {
     float locationHistoryY[16];
     int trailStartIndex;
     int type;
+    int killCounter;
 } Ball;
 
 typedef enum {
@@ -51,6 +52,7 @@ typedef struct {
     float bounceEffect;
     int type;
     int enabled;
+    float angle;
 } Bumper;
 
 typedef struct GameStructData {
@@ -59,7 +61,7 @@ typedef struct GameStructData {
     Ball *balls;
     int active;
     int gameState;
-    int gameScore;
+    long gameScore;
     int powerupScore;
     int powerupScoreDisplay;
     int transitionState;
@@ -71,6 +73,8 @@ typedef struct GameStructData {
     int nameSelectIndex;
     int nameSelectDone;
     int slowMotion;
+    int slowMotionCounter;
+    InputManager *input;
 } GameStruct;
 
 typedef struct {
@@ -84,7 +88,9 @@ enum CollisionTypes {
     COLLISION_WALL = 0,
 	COLLISION_BALL = 1,
     COLLISION_BUMPER = 2,
-    COLLISION_PADDLE = 3
+    COLLISION_PADDLE = 3,
+    COLLISION_LEFT_LOWER_BUMPER = 4,
+    COLLISION_RIGHT_LOWER_BUMPER = 5
 };
 
 const int numWalls = 128;
@@ -94,6 +100,37 @@ const float ballSize = 5;
 static float slowMotionFactor = 1.0f;
 static float iceOverlayAlpha = 0.0f;
 // Collision handlers
+
+static float leftLowerBumperAnim = 0.0f;
+static float rightLowerBumperAnim = 0.0f;
+
+static float multiballOverlayY = 0.0f;
+
+static cpBool CollisionHandlerLeftLowerBumper(cpArbiter *arb, cpSpace *space, void *ignore){
+	CP_ARBITER_GET_SHAPES(arb, a, b);
+    Ball *ball = (Ball *)cpShapeGetUserData(a);
+    leftLowerBumperAnim = 1.0f;
+    (ball->game)->gameScore += 50;
+    (ball->game)->powerupScore += 50;
+    inputSetScore((ball->game)->input,(ball->game)->gameScore);
+    return cpTrue;
+}
+static cpBool CollisionHandlerRightLowerBumper(cpArbiter *arb, cpSpace *space, void *ignore){
+	CP_ARBITER_GET_SHAPES(arb, a, b);
+    Ball *ball = (Ball *)cpShapeGetUserData(a);
+    rightLowerBumperAnim = 1.0f;
+    (ball->game)->gameScore += 100;
+    (ball->game)->powerupScore += 100;
+    inputSetScore((ball->game)->input,(ball->game)->gameScore);
+    return cpTrue;
+}
+static cpBool CollisionHandlerBallFlipper(cpArbiter *arb, cpSpace *space, void *ignore){
+	CP_ARBITER_GET_SHAPES(arb, a, b);
+    Ball *ball = (Ball *)cpShapeGetUserData(a);
+    ball->killCounter = 0;
+    return cpTrue;
+}
+
 static cpBool CollisionHandlerBallBumper(cpArbiter *arb, cpSpace *space, void *ignore){
 	CP_ARBITER_GET_SHAPES(arb, a, b);
 	Bumper* bumper = (Bumper *)cpShapeGetUserData(b);
@@ -102,21 +139,28 @@ static cpBool CollisionHandlerBallBumper(cpArbiter *arb, cpSpace *space, void *i
     if (bumper->type == 0){
         // On the bumper object, set the collision effect
         bumper->bounceEffect = 10.0f;
-        if (ball->type == 0){
-            (ball->game)->gameScore += 100;
-            (ball->game)->powerupScore += 100;
-        }
+        //if (ball->type == 0){
+        (ball->game)->gameScore += 100;
+        (ball->game)->powerupScore += 100;
+        //}
 
         // On the ball object, add a random velocity
         //cpBodyApplyImpulseAtLocalPoint(ball->body,cpv(rand() % 20 - 10, rand() % 20 - 10),cpvzero);
+    	return cpTrue;
     } else if (bumper->type == 1){
-        slowMotionFactor = 0.2f;
+        (ball->game)->slowMotion = 1;
+        (ball->game)->slowMotionCounter = 1200;
         (ball->game)->gameScore += 1000;
         (ball->game)->powerupScore += 1000;
         bumper->bounceEffect = 20.0f;
+    } else {
+        (ball->game)->gameScore += 500;
+        (ball->game)->powerupScore += 500;
+        bumper->enabled = 0;
     }
+    inputSetScore((ball->game)->input,(ball->game)->gameScore);
 
-	return cpTrue;
+	return cpFalse;
 }
 
 // Add ball function
@@ -133,10 +177,11 @@ void addBall(GameStruct *game, float px, float py, float vx, float vy,int type){
         }
 
         float radius = ballSize / 2.0;
-        if (type == 1){
-            //radius = 1.0;
-        }
         float mass = 1.0;
+        if (type == 2){
+            radius = 10.0f;
+            mass = 2.0f;
+        }
         cpFloat moment = cpMomentForCircle(mass, 0, radius, cpvzero);
         game->balls[ballIndex].body = cpSpaceAddBody(game->space,cpBodyNew(mass,moment));
         cpBodySetPosition(game->balls[ballIndex].body,cpv(px,py));
@@ -150,8 +195,9 @@ void addBall(GameStruct *game, float px, float py, float vx, float vy,int type){
         game->balls[ballIndex].game = game;
         game->balls[ballIndex].trailStartIndex = 0;
         game->balls[ballIndex].type = type;
+        game->balls[ballIndex].killCounter = 0;
         if (type == 0){
-            slowMotionFactor = 1.0f;
+            game->slowMotion = 0;
         }
 
         for (int i = 0; i< 16; i++){
@@ -216,6 +262,7 @@ void startGame(GameStruct *game){
     game->gameScore = 0;
     game->powerupScore = 0;
     game->powerupScoreDisplay = 0;
+    inputSetGameState(game->input,STATE_GAME);
 }
 
 int main(void){
@@ -261,6 +308,7 @@ int main(void){
 
     Texture bgTex = LoadTexture("Resources/Textures/background2.png");
     Texture ballTex = LoadTexture("Resources/Textures/ball.png");
+    Texture beachBallTex = LoadTexture("Resources/Textures/beachBall.png");
     Texture trailTex = LoadTexture("Resources/Textures/trail.png");
     Texture bumperTex = LoadTexture("Resources/Textures/bumper.png");
     Texture iceBumperTex = LoadTexture("Resources/Textures/iceBumper.png");
@@ -277,8 +325,11 @@ int main(void){
     Texture menuControls = LoadTexture("Resources/Textures/menuControls.png");
     Texture transitionTex = LoadTexture("Resources/Textures/transition.png");
     Texture waterTex = LoadTexture("Resources/Textures/waterTex.png");
+    Texture waterOverlayTex = LoadTexture("Resources/Textures/waterOverlayTex.png");
     Texture particleTex = LoadTexture("Resources/Textures/particle.png");
     Texture iceOverlay = LoadTexture("Resources/Textures/iceOverlay.png");
+    Texture bumper3 = LoadTexture("Resources/Textures/bumper3.png");
+    Texture lowerBumperShock = LoadTexture("Resources/Textures/lowerBumperShock.png");
 
     Font font1 = LoadFontEx("Resources/Fonts/Avenir-Black.ttf",80,0,0);
     Font font2 = LoadFontEx("Resources/Fonts/Avenir-Black.ttf",120,0,0);
@@ -326,11 +377,35 @@ int main(void){
         cpSpaceAddShape(space,wall);
     }
 
+
     // Create bumpers
-    const int numBumpers = 4;
+    const int numBumpers = 9;
     const float bumperSize = 10.0f;
     const float bumperBounciness = 2.2f;
     Bumper* bumpers = malloc(numBumpers * sizeof(Bumper));
+
+
+    cpShape *bouncer1 = cpSegmentShapeNew(cpSpaceGetStaticBody(space),cpv(14.800000,125.200005),cpv(7.600000,109.200005),0);
+    cpShape *bouncer2 = cpSegmentShapeNew(cpSpaceGetStaticBody(space),cpv(75.599998,108.800003),cpv(69.200005,125.200005),0);
+    cpShapeSetCollisionType(bouncer1, COLLISION_LEFT_LOWER_BUMPER);
+    cpShapeSetCollisionType(bouncer2, COLLISION_RIGHT_LOWER_BUMPER);
+
+    cpShapeSetFriction(bouncer1,0.0);
+    cpShapeSetElasticity(bouncer1,1.5f);
+    cpSpaceAddShape(space,bouncer1);
+    cpShapeSetFriction(bouncer2,0.0);
+    cpShapeSetElasticity(bouncer2,1.5f);
+    cpSpaceAddShape(space,bouncer2);
+    cpShape *bouncerGuard1 = cpSegmentShapeNew(cpSpaceGetStaticBody(space),cpv(7.200000,111.200005),cpv(12.800000,124.400002),0);
+    cpShape *bouncerGuard2 = cpSegmentShapeNew(cpSpaceGetStaticBody(space),cpv(71.200005,124.800003),cpv(76.000000,110.800003),0);
+    cpShapeSetCollisionType(bouncerGuard1, COLLISION_WALL);
+    cpShapeSetCollisionType(bouncerGuard2, COLLISION_WALL);
+    cpSpaceAddShape(space,bouncerGuard1);
+    cpShapeSetFriction(bouncerGuard1,0.0f);
+    cpShapeSetElasticity(bouncerGuard1,0.9f);
+    cpSpaceAddShape(space,bouncerGuard2);
+    cpShapeSetFriction(bouncerGuard2,0.0f);
+    cpShapeSetElasticity(bouncerGuard2,0.9f);
 
 
     bumpers[0].body = cpSpaceAddBody(space,cpBodyNewKinematic());
@@ -369,9 +444,44 @@ int main(void){
     bumpers[3].bounceEffect = 0;
     bumpers[3].type = 1;
 
+    for (int i = 4; i < 9; i++){
+        bumpers[i].body = cpSpaceAddBody(space,cpBodyNewKinematic());
+        bumpers[i].shape = cpSpaceAddShape(space,cpCircleShapeNew(bumpers[i].body,2.0f,cpvzero));
+        cpShapeSetElasticity(bumpers[i].shape,0);
+        cpShapeSetCollisionType(bumpers[i].shape, COLLISION_BUMPER);
+        cpShapeSetUserData(bumpers[i].shape,&bumpers[i]);
+        bumpers[i].bounceEffect = 0;
+        bumpers[i].type = 2;
+        bumpers[i].enabled = 1;
+    }
+    cpBodySetPosition(bumpers[4].body,cpv(63.2,50.400002));
+    cpBodySetPosition(bumpers[5].body,cpv(77.6,70.800003));
+    cpBodySetPosition(bumpers[6].body,cpv(61.0,36.000000));
+    cpBodySetPosition(bumpers[7].body,cpv(63.4,28.800001));
+    cpBodySetPosition(bumpers[8].body,cpv(66.2,21.200001));
+    bumpers[4].type = 2;
+    bumpers[5].type = 2;
+    bumpers[6].type = 3;
+    bumpers[7].type = 3;
+    bumpers[8].type = 3;
+    bumpers[4].angle = -34;
+    bumpers[5].angle = -34;
+    bumpers[6].angle = 18;
+    bumpers[7].angle = 18;
+    bumpers[8].angle = 18;
+
+
     //Add collision handler for ball-bumper effect
     cpCollisionHandler *handler = cpSpaceAddCollisionHandler(space,COLLISION_BALL,COLLISION_BUMPER);
     handler->beginFunc = CollisionHandlerBallBumper;
+
+    cpCollisionHandler *ballFlipperHandler = cpSpaceAddCollisionHandler(space,COLLISION_BALL,COLLISION_PADDLE);
+    handler->preSolveFunc = CollisionHandlerBallFlipper;
+
+    cpCollisionHandler *leftLower = cpSpaceAddCollisionHandler(space,COLLISION_BALL,COLLISION_LEFT_LOWER_BUMPER);
+    cpCollisionHandler *rightLower = cpSpaceAddCollisionHandler(space,COLLISION_BALL,COLLISION_RIGHT_LOWER_BUMPER);
+    leftLower->beginFunc = CollisionHandlerLeftLowerBumper;
+    rightLower->beginFunc = CollisionHandlerRightLowerBumper;
 
     // Create left and right flippers
     cpBody* leftFlipperBody = cpBodyNewKinematic();
@@ -441,6 +551,7 @@ int main(void){
 
     // Setup input
     InputManager *input = inputInit();
+    game.input = input;
 
     // Setup score system
     ScoreHelper *scores = initScores();
@@ -462,6 +573,8 @@ int main(void){
     game.nameSelectIndex = 0;
     game.nameSelectDone = 0;
 
+    multiballOverlayY = 20 + worldHeight;
+
 
     game.gameState = 5;
 
@@ -469,6 +582,7 @@ int main(void){
     char nameString[6];
     sprintf(nameString,"     ");
 
+    inputSetGameState(input,STATE_MENU);
 
     while (!WindowShouldClose()){
         endTime = millis();
@@ -478,8 +592,8 @@ int main(void){
         SetShaderValue(swirlShader, secondsLoc, &shaderSeconds, UNIFORM_FLOAT);
 
 
-        float mouseX = GetMouseX();
-        float mouseY = GetMouseY();
+        float mouseX = GetMouseX() * 2;
+        float mouseY = GetMouseY() * 2;
 
         // Poll input
         inputUpdate(input);
@@ -582,6 +696,7 @@ int main(void){
                     //addBall(&game,89.5 - ballSize / 2,160,0,-220);
                 }
                 if (game.numBalls == 0){
+                    inputSetNumBalls(input,game.numBalls);
                     if (game.numLives > 0){
                         addBall(&game,89.5 - ballSize / 2,160,0,-220,0);
                         game.numLives -= 1;
@@ -590,6 +705,7 @@ int main(void){
                         if (game.transitionState == 0){
                             game.transitionState = 1;
                             game.transitionTarget = TRANSITION_GAME_OVER;
+                            inputSetGameState(input,STATE_GAME_OVER);
                         }
                         // Test: Submit score
                         //submitScore(scores,"DALK",game.gameScore);
@@ -599,8 +715,10 @@ int main(void){
 
 
                 if (IsMouseButtonPressed(0)){
-                    addBall(&game,(mouseX) * screenToWorld,(mouseY) * screenToWorld,0,0,0);
+                    addBall(&game,(mouseX) * screenToWorld,(mouseY) * screenToWorld,0,0,1);
                 }
+
+                //h
 
                 float oldAngleLeft = leftFlipperAngle;
                 float oldAngleRight = rightFlipperAngle;
@@ -644,10 +762,21 @@ int main(void){
 
                 // Check if any balls have fallen outside the screen
                 // Remove them if they have.
+                // Check if any balls are standing still for too long and remove.
                 for (int i = 0; i < maxBalls; i++){
                     if (balls[i].active == 1){
                         cpVect pos = cpBodyGetPosition(balls[i].body);
-                        if (pos.y > 170+ballSize){
+                        cpVect vel = cpBodyGetVelocity(balls[i].body);
+                        if (cpvlengthsq(vel)<0.01f){
+                            balls[i].killCounter++;
+                        } else {
+                            balls[i].killCounter=0;
+                        }
+                        // Reset kill counter near flippers
+                        if (pos.y > 118){
+                            balls[i].killCounter=0;
+                        }
+                        if (pos.y > 170+ballSize || balls[i].killCounter > 100){
                             balls[i].active = 0;
                             cpSpaceRemoveShape(game.space,balls[i].shape);
                             cpSpaceRemoveBody(game.space,balls[i].body);
@@ -690,19 +819,68 @@ int main(void){
                     }
                 }*/
 
+                // "Beachball" test
+                // has a low terminal velocity
+                for (int i = 0; i < maxBalls; i++){
+                    if (balls[i].active == 1 && balls[i].type == 2){
+                        cpVect pos = cpBodyGetPosition(balls[i].body);
+                        cpVect vel = cpBodyGetVelocity(balls[i].body);
+                        cpVect forceX = cpvmult(vel,0.0);
+                        cpVect forceY = cpvmult(cpvneg(vel),10);
+                        cpBodyApplyForceAtLocalPoint (balls[i].body, cpv(forceX.x,forceY.y), cpvzero);
+                        cpBodySetAngularVelocity(balls[i].body,vel.x * 0.05f);
+                        //printf("%f %f\n",forceX.x,forceY.y);
+                    }
+                }
+
+                //handler lower bumpers
+                if (leftLowerBumperAnim > 0.0f){
+                    leftLowerBumperAnim -= 0.05f;
+                    if (leftLowerBumperAnim < 0.0f){
+                        leftLowerBumperAnim = 0.0f;
+                    }
+                }
+                if (rightLowerBumperAnim > 0.0f){
+                    rightLowerBumperAnim -= 0.05f;
+                    if (rightLowerBumperAnim < 0.0f){
+                        rightLowerBumperAnim = 0.0f;
+                    }
+                }
+
+                //handle multiball overlay
+
+                float multiballOverlayTargetY = 20 + worldHeight - (20.0f * game.numBalls);
+                if (multiballOverlayY < multiballOverlayTargetY){
+                    multiballOverlayY += 0.25f;
+                } else if (multiballOverlayY > multiballOverlayTargetY){
+                    multiballOverlayY -= 0.25f;
+                }
+
+
                 //update ice overlay
-                if (slowMotionFactor < 1.0f){
+                if (game.slowMotion == 1){
+                    slowMotionFactor = 0.3f;
                     iceOverlayAlpha += 0.01f;
+                    if (iceOverlayAlpha >= 1.0f){
+                        iceOverlayAlpha = 1.0f;
+                    }
                 } else {
+                    if (slowMotionFactor < 1.0f){
+                        slowMotionFactor += 0.05f;
+                        if (slowMotionFactor > 1.0f){
+                            slowMotionFactor = 1.0f;
+                        }
+                    }
                     iceOverlayAlpha -= 0.01f;
+                    if (iceOverlayAlpha <= 0.0f){
+                        iceOverlayAlpha = 0.0f;
+                    }
                 }
-                if (iceOverlayAlpha <= 0.0f){
-                    iceOverlayAlpha = 0.0f;
-                    game.slowMotion = 0;
-                }
-                if (iceOverlayAlpha >= 1.0f){
-                    iceOverlayAlpha = 1.0f;
-                    game.slowMotion = 1;
+                if (game.slowMotionCounter > 0){
+                    game.slowMotionCounter--;
+                    if (game.slowMotionCounter <= 0){
+                        game.slowMotion = 0;
+                    }
                 }
 
                 // Update bumper
@@ -714,7 +892,8 @@ int main(void){
                 if (game.powerupScoreDisplay < game.powerupScore){
                     game.powerupScoreDisplay += 4;
                 } else if (game.powerupScoreDisplay > game.powerupScore){
-                    game.powerupScoreDisplay -= 10;
+                    game.powerupScoreDisplay -= 20;
+                    game.powerupScore = 0;
                 }
                 if (game.powerupScoreDisplay < 0){
                     game.powerupScoreDisplay = 0;
@@ -722,7 +901,7 @@ int main(void){
                 // If the powerup is full, dispense powerup
                 if (game.powerupScoreDisplay >= powerupTargetScore){
                     game.powerupScore = 0;
-                    for (int i =0; i < 16; i++){
+                    for (int i =0; i < 8; i++){
                         addBall(&game,89.5 - ballSize / 2,160 - (i * ballSize),0,-220,1);
                     }
                     //for (int x = -1; x <= 1; x++){
@@ -755,7 +934,7 @@ int main(void){
                             game.transitionState = 1;
                             game.transitionTarget = TRANSITION_TO_MENU;
                             submitScore(scores,nameString,game.gameScore);
-                            printf("Game Over. score: %d\n",game.gameScore);
+                            printf("Game Over. score: %ld\n",game.gameScore);
                         } else {
                             if (game.nameSelectIndex > 0){
                                 while (game.nameSelectIndex-1 >= 0 && nameString[game.nameSelectIndex-1] == 32){
@@ -855,7 +1034,6 @@ int main(void){
             float powerupY = powerupFullY - (powerupProportion * powerupHeight / 2.0f);
             BeginShaderMode(swirlShader);
             DrawTexturePro(waterTex,(Rectangle){0,0,waterTex.width,waterTex.height},(Rectangle){30 * worldToScreen,powerupY* worldToScreen,powerupHeight* worldToScreen,powerupHeight* worldToScreen},(Vector2){0,0},0,WHITE);
-
             EndShaderMode();
 
 
@@ -876,6 +1054,10 @@ int main(void){
                         float trailSize = ballSize * sqrt(ii/16.0f);
                         Color ballColor = (Color){255,183,0,255};
                         if (balls[i].type == 1){ ballColor = BLUE; }
+                        if (balls[i].type == 2){
+                            ballColor = WHITE;
+                            trailSize = 20.0f * sqrt(ii/16.0f);
+                        }
                         if (game.slowMotion == 1){ ballColor = WHITE; }
                         DrawTexturePro(trailTex,(Rectangle){0,0,trailTex.width,trailTex.height},(Rectangle){balls[i].locationHistoryX[index] * worldToScreen,balls[i].locationHistoryY[index] * worldToScreen,trailSize * worldToScreen,trailSize * worldToScreen},(Vector2){(trailSize / 2.0) * worldToScreen,(trailSize / 2.0) * worldToScreen},0,ballColor);
 
@@ -914,6 +1096,17 @@ int main(void){
             //EndBlendMode();
             //EndTextureMode();
 
+            // Render beach balls
+            for (int i = 0; i < maxBalls; i++){
+                if (balls[i].active == 1 && balls[i].type == 2){
+                    //Render ball
+                    cpVect pos = cpBodyGetPosition(balls[i].body);
+                    float angle = cpBodyGetAngle(balls[i].body) * RAD_TO_DEG;
+                    float size = 25.0f;
+                    DrawTexturePro(beachBallTex,(Rectangle){0,0,beachBallTex.width,beachBallTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,size * worldToScreen,size * worldToScreen},(Vector2){(size / 2.0) * worldToScreen,(size / 2.0) * worldToScreen},angle,WHITE);
+                }
+            }
+
             // Render bumpers
             for (int i = 0; i < numBumpers; i++){
                 cpVect pos = cpBodyGetPosition(bumpers[i].body);
@@ -933,7 +1126,43 @@ int main(void){
                     DrawTexturePro(iceBumperTex,(Rectangle){0,0,iceBumperTex.width,iceBumperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,width * worldToScreen,height * worldToScreen},(Vector2){(width / 2.0) * worldToScreen,(height / 2.0) * worldToScreen},angle,WHITE);
                     DrawTexturePro(trailTex,(Rectangle){0,0,trailTex.width,trailTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,shockSize * worldToScreen,shockSize * worldToScreen},(Vector2){(shockSize / 2.0) * worldToScreen,(shockSize / 2.0) * worldToScreen},0,(Color){255,255,255,255 * shockPercent});
 
+                } else if (bumpers[i].type == 2 || bumpers[i].type == 3){
+                    float width = 3.0f;
+                    float height = 6.0f;
+                    Color bumperColor = (Color){255,255,255,100};
+                    if (bumpers[i].enabled == 0){
+                        width = 1.5f;
+                        height = 6.0f;
+                    } else {
+                        if (bumpers[i].type == 2){
+                            bumperColor = RED;
+                        } else if (bumpers[i].type == 3){
+                            bumperColor = BLUE;
+                        }
+                    }
+                    DrawTexturePro(bumper3,(Rectangle){0,0,bumper3.width,bumper3.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,width * worldToScreen,height * worldToScreen},(Vector2){(width / 2.0) * worldToScreen,(height / 2.0) * worldToScreen},bumpers[i].angle,bumperColor);
                 }
+            }
+
+            //render lower bumpers
+            if (leftLowerBumperAnim > 0.0f){
+                float percent = 1.0f - leftLowerBumperAnim;
+                float x = 10.0f;
+                float y = 117.2f;
+                float width = 8.0f+ (2.0f * percent);
+                float height = 18.0f + (4.0f * percent);
+                float angle = -24.0f + sin(shaderSeconds * 100.0f) * 10.0f;
+                DrawTexturePro(lowerBumperShock,(Rectangle){0,0,lowerBumperShock.width,lowerBumperShock.height},(Rectangle){x * worldToScreen,y * worldToScreen,width * worldToScreen,height * worldToScreen},(Vector2){(width / 2.0) * worldToScreen,(height / 2.0) * worldToScreen},angle,(Color){255,255,255,255* (1.0f -percent)});
+            }
+            if (rightLowerBumperAnim > 0.0f){
+                float percent = 1.0f - rightLowerBumperAnim;
+                float x = 73.2f;
+                float y = 117.2f;
+                float width = 8.0f+ (2.0f * percent);
+                float height = 18.0f + (4.0f * percent);
+                float angle = 24.0f - sin(shaderSeconds * 100.0f) * 10.0f;
+                DrawTexturePro(lowerBumperShock,(Rectangle){0,0,lowerBumperShock.width,lowerBumperShock.height},(Rectangle){x * worldToScreen,y * worldToScreen,width * worldToScreen,height * worldToScreen},(Vector2){(width / 2.0) * worldToScreen,(height / 2.0) * worldToScreen},angle,(Color){255,255,255,255* (1.0f -percent)});
+
             }
 
             // Render left flipper
@@ -945,14 +1174,20 @@ int main(void){
             angle = cpBodyGetAngle(rightFlipperBody);
             DrawTexturePro(rightFlipperTex,(Rectangle){0,0,rightFlipperTex.width,rightFlipperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,flipperWidth * worldToScreen,flipperHeight * worldToScreen},(Vector2){0 * worldToScreen,0 * worldToScreen},(angle * RAD_TO_DEG),WHITE);
 
-            //sprintf(tempString,"%d)",game.gameScore);
-            //DrawTextEx(font1, tempString, (Vector2){screenWidth/2,screenHeight/2}, 30, 1.0, WHITE);
+            sprintf(tempString,"%ld",game.gameScore);
+            DrawTextEx(font1, tempString, (Vector2){10,screenHeight - 35}, 30, 1.0, WHITE);
 
             // Render special ball render target
             //DrawTextureRec(renderTarget.texture, (Rectangle){ 0, 0, screenWidth, screenHeight}, (Vector2){ 0, 0 }, WHITE);
             //BeginShaderMode(alphaTestShader);
             //DrawTextureRec(renderTarget.texture, (Rectangle){ 0, 0, renderTarget.texture.width, -renderTarget.texture.height }, (Vector2){ 0, 0 }, WHITE);
             //EndShaderMode();
+
+            // Multi-ball overlay
+            BeginShaderMode(swirlShader);
+
+            DrawTexturePro(waterOverlayTex,(Rectangle){0,0,waterOverlayTex.width,waterOverlayTex.height},(Rectangle){0,multiballOverlayY* worldToScreen,screenWidth+200,screenHeight+200},(Vector2){0,0},0,(Color){255,255,255,100});
+            EndShaderMode();
 
             if (iceOverlayAlpha > 0.0f){
                 BeginBlendMode(BLEND_ADDITIVE);
@@ -1000,7 +1235,7 @@ int main(void){
             DrawTexturePro(gameOverOverlay1,(Rectangle){0,0,gameOverOverlay1.width,gameOverOverlay1.height},(Rectangle){0,0,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
             DrawTexturePro(gameOverOverlay2,(Rectangle){0,0,gameOverOverlay2.width,gameOverOverlay2.height},(Rectangle){0,12 + sin((millis() - elapsedTimeStart) / 1000.0f)*5.0f,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
 
-            sprintf(tempString,"%d",game.gameScore);
+            sprintf(tempString,"%ld",game.gameScore);
             DrawTextEx(font2, "Score:", (Vector2){screenWidth/2 - MeasureTextEx(font2, "Score:", 60, 1.0).x/2,275}, 60, 1.0, WHITE);
             DrawTextEx(font2, tempString, (Vector2){screenWidth/2 - MeasureTextEx(font2, tempString, 60, 1.0).x/2,332}, 60, 1.0, WHITE);
 

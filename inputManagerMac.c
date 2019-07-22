@@ -37,3 +37,13 @@ int inputRightPressed(InputManager* input){
 int inputCenterPressed(InputManager* input){
     return IsKeyPressed(KEY_SPACE);
 }
+
+void inputSetGameState(InputManager* input, InputGameState state){
+
+}
+void inputSetScore(InputManager *input, long score){
+
+}
+void inputSetNumBalls(InputManager *input, int numBalls){
+    
+}

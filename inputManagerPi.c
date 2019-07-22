@@ -2,6 +2,8 @@
 #include <wiringSerial.h>
 #include <stdlib.h>
 
+static char tempString[64];
+
 InputManager* inputInit(){
     InputManager *input = malloc(sizeof(InputManager));
     input->fd = serialOpen("/dev/ttyACM0",9600);
@@ -68,4 +70,38 @@ int inputCenterPressed(InputManager* input){
         input->centerKeyPressed = 0;
     }
     return 0;
+}
+
+// Send game state
+void inputSetGameState(InputManager* input, InputGameState state){
+    switch (state){
+        case STATE_MENU: {
+            sprintf(tempString,"m\n");
+            serialPuts(input->fd,tempString);
+            serialFlush(input->fd);
+            break;
+        }
+        case STATE_GAME: {
+            sprintf(tempString,"r\n");
+            serialPuts(input->fd,tempString);
+            serialFlush(input->fd);
+            break;
+        }
+        case STATE_GAME_OVER: {
+            sprintf(tempString,"g\n");
+            serialPuts(input->fd,tempString);
+            serialFlush(input->fd);
+            break;
+        }
+    }
+}
+void inputSetScore(InputManager *input, long score){
+    sprintf(tempString,"s=%ld\n",score);
+    serialPuts(input->fd,tempString);
+    serialFlush(input->fd);
+}
+void inputSetNumBalls(InputManager *input, int numBalls){
+    sprintf(tempString,"b=%d\n",numBalls);
+    serialPuts(input->fd,tempString);
+    serialFlush(input->fd);
 }
