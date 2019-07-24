@@ -820,9 +820,7 @@ int main(void){
                 if (game.numBalls == 0){
                     if (game.numLives >= 1){
                         if (inputCenterPressed(input)){
-                            game.numLives -= 1;
                             addBall(&game,89.5 - ballSize / 2,160,0,-220,0);
-                            inputSetNumBalls(input,game.numLives);
                         }
                     } else {
                         // game over condition
@@ -917,6 +915,13 @@ int main(void){
                             cpShapeFree(balls[i].shape);
                             cpBodyFree(balls[i].body);
                             game.numBalls--;
+                            //Check number of lives and send to score if necessary
+                            if (game.numBalls == 0){
+                                if (game.numLives >= 1){
+                                    game.numLives -= 1;
+                                    inputSetNumBalls(input,game.numLives);
+                                }
+                            }
                         }
                     }
                 }
@@ -1341,19 +1346,18 @@ int main(void){
             }
 
             if (game.numBalls == 0 && game.numLives > 0){
-                            if ((millis() - elapsedTimeStart) % 1700 >550){
                 DrawRectangleRounded((Rectangle){108,600,screenWidth-238,80},0.1,16,(Color){0,0,0,100});
                 DrawRectangleRounded((Rectangle){112,604,screenWidth-242,76},0.1,16,(Color){0,0,0,100});
 
-                    if (game.numLives == 3){
-                        DrawTextEx(font1, "Ball 1 / 3", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 1 / 3", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
-                    } else if (game.numLives == 2){
-                        DrawTextEx(font1, "Ball 2 / 3", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 2 / 3", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
-                    } else if (game.numLives == 1){
-                        DrawTextEx(font1, "Ball 3 / 3", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 3 / 3", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
-                    }
-                    DrawTextEx(font1, "Center Button to Launch!", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Center Button to Launch!", 20.0, 1.0).x/2  - 10,650}, 20, 1.0, WHITE);
+                if (game.numLives == 3){
+                    DrawTextEx(font1, "Ball 1 / 3", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 1 / 3", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
+                } else if (game.numLives == 2){
+                    DrawTextEx(font1, "Ball 2 / 3", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 2 / 3", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
+                } else if (game.numLives == 1){
+                    DrawTextEx(font1, "Ball 3 / 3", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 3 / 3", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
                 }
+                DrawTextEx(font1, "Center Button to Launch!", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Center Button to Launch!", 20.0, 1.0).x/2  - 10,650}, 20, 1.0, WHITE);
+
                 for (int i = 0; i < 8; i++){
                     DrawTexturePro(arrowRight,(Rectangle){0,0,arrowRight.width,arrowRight.height},(Rectangle){screenWidth - 9,(i * 20) + 625+ (5 * sin(((i*100)+millis()-elapsedTimeStart)/200.0f)),20,20},(Vector2){16,16},-90,(Color){0,0,0,100});
                 }
