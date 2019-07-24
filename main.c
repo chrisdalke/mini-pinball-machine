@@ -488,6 +488,8 @@ int main(void){
     cpShapeSetCollisionType(bumpers[10].shape, COLLISION_BUMPER);
     cpShapeSetUserData(bumpers[10].shape,&bumpers[10]);
     bumpers[10].bounceEffect = 0;
+    bumpers[10].enabledSize = 0.0f;
+    bumpers[10].enabled = 0;
     bumpers[10].type = 4;
 
     bumpers[11].body = cpSpaceAddBody(space,cpBodyNewKinematic());
@@ -497,6 +499,8 @@ int main(void){
     cpShapeSetCollisionType(bumpers[11].shape, COLLISION_BUMPER);
     cpShapeSetUserData(bumpers[11].shape,&bumpers[11]);
     bumpers[11].bounceEffect = 0;
+    bumpers[11].enabledSize = 0.0f;
+    bumpers[11].enabled = 0;
     bumpers[11].type = 4;
 
     bumpers[12].body = cpSpaceAddBody(space,cpBodyNewKinematic());
@@ -506,6 +510,8 @@ int main(void){
     cpShapeSetCollisionType(bumpers[12].shape, COLLISION_BUMPER);
     cpShapeSetUserData(bumpers[12].shape,&bumpers[12]);
     bumpers[12].bounceEffect = 0;
+    bumpers[12].enabledSize = 0.0f;
+    bumpers[12].enabled = 0;
     bumpers[12].type = 4;
 
     bumpers[13].body = cpSpaceAddBody(space,cpBodyNewKinematic());
@@ -515,6 +521,8 @@ int main(void){
     cpShapeSetCollisionType(bumpers[13].shape, COLLISION_BUMPER);
     cpShapeSetUserData(bumpers[13].shape,&bumpers[13]);
     bumpers[13].bounceEffect = 0;
+    bumpers[13].enabledSize = 0.0f;
+    bumpers[13].enabled = 0;
     bumpers[13].type = 4;
 
 
@@ -1288,7 +1296,7 @@ int main(void){
                     shockSize *= bumpers[i].enabledSize;
                     DrawTexturePro(shockwaveTex,(Rectangle){0,0,shockwaveTex.width,shockwaveTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,shockSize * worldToScreen,shockSize * worldToScreen},(Vector2){shockSize/2 * worldToScreen,shockSize/2 * worldToScreen},0,RED);
                     DrawTexturePro(bumperLightTex,(Rectangle){0,0,bumperTex.width,bumperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,width * worldToScreen,height * worldToScreen},(Vector2){(width / 2.0) * worldToScreen,(height / 2.0) * worldToScreen},0,RED);
-                    printf("bumper %d: %f %f %f\n",i,width,height,bumpers[i].enabledSize);
+                    //printf("bumper %d: %f %f %f\n",i,width,height,bumpers[i].enabledSize);
                 }
             }
 
