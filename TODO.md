@@ -11,10 +11,10 @@
 
 
 scoring:
-- 10 points for lower bumper
-- 25 points for upper bumpers
+- 25 points for lower bumper
+- 50 points for upper bumpers
 - 50 points for blue or red powerup bumper
-- 100 points for special bumper
+- 250 points for special bumper
 - 1000 points for slowmotion powerup
 - 500 points for achieving blue or red powerup
 - 1000 points for water powerup

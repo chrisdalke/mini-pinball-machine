@@ -46,9 +46,9 @@ static cpBool CollisionHandlerLeftLowerBumper(cpArbiter *arb, cpSpace *space, vo
 	CP_ARBITER_GET_SHAPES(arb, a, b);
     Ball *ball = (Ball *)cpShapeGetUserData(a);
     leftLowerBumperAnim = 1.0f;
-    (ball->game)->gameScore += 10;
+    (ball->game)->gameScore += 25;
     if ((ball->game)->waterPowerupState == 0){
-        (ball->game)->powerupScore += 10;
+        (ball->game)->powerupScore += 25;
     }
     playBounce2((ball->game)->sound);
     return cpTrue;
@@ -57,9 +57,9 @@ static cpBool CollisionHandlerRightLowerBumper(cpArbiter *arb, cpSpace *space, v
 	CP_ARBITER_GET_SHAPES(arb, a, b);
     Ball *ball = (Ball *)cpShapeGetUserData(a);
     rightLowerBumperAnim = 1.0f;
-    (ball->game)->gameScore += 10;
+    (ball->game)->gameScore += 25;
     if ((ball->game)->waterPowerupState == 0){
-        (ball->game)->powerupScore += 10;
+        (ball->game)->powerupScore += 25;
     }
     playBounce2((ball->game)->sound);
     return cpTrue;
@@ -81,9 +81,9 @@ static cpBool CollisionHandlerBallBumper(cpArbiter *arb, cpSpace *space, void *i
         // On the bumper object, set the collision effect
         bumper->bounceEffect = 10.0f;
         //if (ball->type == 0){
-        (ball->game)->gameScore += 25;
+        (ball->game)->gameScore += 50;
         if ((ball->game)->waterPowerupState == 0){
-            (ball->game)->powerupScore += 25;
+            (ball->game)->powerupScore += 50;
         }
         playUpperBouncerSound((ball->game)->sound);
         //}
@@ -121,9 +121,9 @@ static cpBool CollisionHandlerBallBumper(cpArbiter *arb, cpSpace *space, void *i
     } else if (bumper->type == 4){
         if (bumper->enabled == 1){
             bumper->bounceEffect = 10.0f;
-            (ball->game)->gameScore += 100;
+            (ball->game)->gameScore += 250;
             if ((ball->game)->waterPowerupState == 0){
-                (ball->game)->powerupScore += 100;
+                (ball->game)->powerupScore += 250;
             }
             bumper->enabled = 0;
             playBounce((ball->game)->sound);
