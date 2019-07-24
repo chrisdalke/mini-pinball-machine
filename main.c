@@ -76,7 +76,6 @@ static cpBool CollisionHandlerBallBumper(cpArbiter *arb, cpSpace *space, void *i
 	Bumper* bumper = (Bumper *)cpShapeGetUserData(b);
     Ball *ball = (Ball *)cpShapeGetUserData(a);
 
-
     if (bumper->type == 0){
         // On the bumper object, set the collision effect
         bumper->bounceEffect = 10.0f;
@@ -1319,8 +1318,8 @@ int main(void){
             DrawTexturePro(rightFlipperTex,(Rectangle){0,0,rightFlipperTex.width,rightFlipperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,flipperWidth * worldToScreen,flipperHeight * worldToScreen},(Vector2){0 * worldToScreen,0 * worldToScreen},(angle * RAD_TO_DEG),WHITE);
 
             // Render score
-            sprintf(tempString,"%ld",game.gameScore);
-            DrawTextEx(font1, tempString, (Vector2){10,screenHeight - 35}, 30, 1.0, WHITE);
+            //sprintf(tempString,"%ld",game.gameScore);
+            //DrawTextEx(font1, tempString, (Vector2){10,screenHeight - 35}, 30, 1.0, WHITE);
 
             // Render water powerup when active
             if (game.waterPowerupState > 0){
