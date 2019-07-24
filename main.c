@@ -248,7 +248,7 @@ ChipmunkDebugDrawDotPointer(cpFloat size, cpVect pos, cpSpaceDebugColor color, c
 // start game
 void startGame(GameStruct *game){
     game->gameState = 1;
-    game->numLives = 3;
+    game->numLives = 5;
     game->gameScore = 0;
     game->powerupScore = 0;
     game->powerupScoreDisplay = 0;
@@ -307,7 +307,7 @@ int main(void){
     game.sound = sound;
 
 
-    //SetConfigFlags(FLAG_SHOW_LOGO | FLAG_VSYNC_HINT);
+    SetConfigFlags(FLAG_SHOW_LOGO | FLAG_VSYNC_HINT);
     InitWindow(screenWidth, screenHeight, "Mini Pinball by Chris Dalke!");
     SetTargetFPS(60);
 
@@ -1349,12 +1349,16 @@ int main(void){
                 DrawRectangleRounded((Rectangle){108,600,screenWidth-238,80},0.1,16,(Color){0,0,0,100});
                 DrawRectangleRounded((Rectangle){112,604,screenWidth-242,76},0.1,16,(Color){0,0,0,100});
 
-                if (game.numLives == 3){
-                    DrawTextEx(font1, "Ball 1 / 3", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 1 / 3", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
+                if (game.numLives == 5){
+                    DrawTextEx(font1, "Ball 1 / 5", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 1 / 5", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
+                } else if (game.numLives == 4){
+                    DrawTextEx(font1, "Ball 2 / 5", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 2 / 5", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
+                } else if (game.numLives == 3){
+                    DrawTextEx(font1, "Ball 3 / 5", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 3 / 5", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
                 } else if (game.numLives == 2){
-                    DrawTextEx(font1, "Ball 2 / 3", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 2 / 3", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
+                    DrawTextEx(font1, "Ball 4 / 5", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 4 / 5", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
                 } else if (game.numLives == 1){
-                    DrawTextEx(font1, "Ball 3 / 3", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 3 / 3", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
+                    DrawTextEx(font1, "Ball 5 / 5", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 5 / 5", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
                 }
                 DrawTextEx(font1, "Center Button to Launch!", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Center Button to Launch!", 20.0, 1.0).x/2  - 10,650}, 20, 1.0, WHITE);
 
