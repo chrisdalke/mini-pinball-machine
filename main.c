@@ -8,6 +8,8 @@
 #include "physicsDebugDraw.h"
 #include "inputManager.h"
 #include "scores.h"
+#include "soundManager.h"
+#include "gameStruct.h"
 
 #define DEG_TO_RAD (3.14159265 / 180.0)
 #define RAD_TO_DEG (180.0 / 3.14159265)
@@ -26,73 +28,6 @@ long long millis() {
     long long milliseconds = te.tv_sec*1000LL + te.tv_usec/1000;
     return milliseconds;
 }
-typedef struct GameStructData GameStruct;
-
-typedef struct {
-    int active;
-    cpShape *shape;
-    cpBody *body;
-    GameStruct *game;
-    float locationHistoryX[16];
-    float locationHistoryY[16];
-    int trailStartIndex;
-    int type;
-    int killCounter;
-} Ball;
-
-typedef enum {
-    TRANSITION_TO_MENU,
-    TRANSITION_TO_GAME,
-    TRANSITION_GAME_OVER
-} TransitionAction;
-
-typedef struct {
-    cpShape *shape;
-    cpBody *body;
-    float bounceEffect;
-    int type;
-    int enabled;
-    float angle;
-} Bumper;
-
-typedef struct GameStructData {
-    cpSpace *space;
-    int numBalls;
-    Ball *balls;
-    int active;
-    int gameState;
-    long gameScore;
-    long oldGameScore;
-    int powerupScore;
-    int powerupScoreDisplay;
-    int transitionState;
-    int transitionDelay;
-    TransitionAction transitionTarget;
-    float transitionAlpha;
-    int numLives;
-    int menuState;
-    int nameSelectIndex;
-    int nameSelectDone;
-    int slowMotion;
-    int slowMotionCounter;
-    InputManager *input;
-} GameStruct;
-
-typedef struct {
-    float px;
-    float py;
-    float vx;
-    float vy;
-} MenuPinball;
-
-enum CollisionTypes {
-    COLLISION_WALL = 0,
-	COLLISION_BALL = 1,
-    COLLISION_BUMPER = 2,
-    COLLISION_PADDLE = 3,
-    COLLISION_LEFT_LOWER_BUMPER = 4,
-    COLLISION_RIGHT_LOWER_BUMPER = 5
-};
 
 const int numWalls = 128;
 const int maxBalls = 256;
@@ -111,16 +46,22 @@ static cpBool CollisionHandlerLeftLowerBumper(cpArbiter *arb, cpSpace *space, vo
 	CP_ARBITER_GET_SHAPES(arb, a, b);
     Ball *ball = (Ball *)cpShapeGetUserData(a);
     leftLowerBumperAnim = 1.0f;
-    (ball->game)->gameScore += 50;
-    (ball->game)->powerupScore += 50;
+    (ball->game)->gameScore += 10;
+    if ((ball->game)->waterPowerupState == 0){
+        (ball->game)->powerupScore += 10;
+    }
+    playBounce2((ball->game)->sound);
     return cpTrue;
 }
 static cpBool CollisionHandlerRightLowerBumper(cpArbiter *arb, cpSpace *space, void *ignore){
 	CP_ARBITER_GET_SHAPES(arb, a, b);
     Ball *ball = (Ball *)cpShapeGetUserData(a);
     rightLowerBumperAnim = 1.0f;
-    (ball->game)->gameScore += 100;
-    (ball->game)->powerupScore += 100;
+    (ball->game)->gameScore += 10;
+    if ((ball->game)->waterPowerupState == 0){
+        (ball->game)->powerupScore += 10;
+    }
+    playBounce2((ball->game)->sound);
     return cpTrue;
 }
 static cpBool CollisionHandlerBallFlipper(cpArbiter *arb, cpSpace *space, void *ignore){
@@ -135,12 +76,16 @@ static cpBool CollisionHandlerBallBumper(cpArbiter *arb, cpSpace *space, void *i
 	Bumper* bumper = (Bumper *)cpShapeGetUserData(b);
     Ball *ball = (Ball *)cpShapeGetUserData(a);
 
+
     if (bumper->type == 0){
         // On the bumper object, set the collision effect
         bumper->bounceEffect = 10.0f;
         //if (ball->type == 0){
-        (ball->game)->gameScore += 100;
-        (ball->game)->powerupScore += 100;
+        (ball->game)->gameScore += 25;
+        if ((ball->game)->waterPowerupState == 0){
+            (ball->game)->powerupScore += 25;
+        }
+        playUpperBouncerSound((ball->game)->sound);
         //}
 
         // On the ball object, add a random velocity
@@ -150,15 +95,61 @@ static cpBool CollisionHandlerBallBumper(cpArbiter *arb, cpSpace *space, void *i
         (ball->game)->slowMotion = 1;
         (ball->game)->slowMotionCounter = 1200;
         (ball->game)->gameScore += 1000;
-        (ball->game)->powerupScore += 1000;
+        if ((ball->game)->waterPowerupState == 0){
+            (ball->game)->powerupScore += 1000;
+        }
+        playSlowdownSound((ball->game)->sound);
         bumper->bounceEffect = 20.0f;
+    } else if (bumper->type == 2){
+        if (bumper->enabled == 1){
+            (ball->game)->gameScore += 50;
+            if ((ball->game)->waterPowerupState == 0){
+                (ball->game)->powerupScore += 50;
+            }
+            bumper->enabled = 0;
+            playBounce((ball->game)->sound);
+        }
+    } else if (bumper->type == 3){
+        if (bumper->enabled == 1){
+            (ball->game)->gameScore += 50;
+            if ((ball->game)->waterPowerupState == 0){
+                (ball->game)->powerupScore += 50;
+            }
+            bumper->enabled = 0;
+            playBounce((ball->game)->sound);
+        }
+    } else if (bumper->type == 4){
+        if (bumper->enabled == 1){
+            bumper->bounceEffect = 10.0f;
+            (ball->game)->gameScore += 100;
+            if ((ball->game)->waterPowerupState == 0){
+                (ball->game)->powerupScore += 100;
+            }
+            bumper->enabled = 0;
+            playBounce((ball->game)->sound);
+            return cpTrue;
+        } else {
+            return cpFalse;
+        }
     } else {
-        (ball->game)->gameScore += 500;
-        (ball->game)->powerupScore += 500;
+        (ball->game)->gameScore += 25;
+        if ((ball->game)->waterPowerupState == 0){
+            (ball->game)->powerupScore += 25;
+        }
         bumper->enabled = 0;
     }
 
 	return cpFalse;
+}
+
+static cpBool CollisionOneWay(cpArbiter *arb, cpSpace *space, void *ignore){
+	CP_ARBITER_GET_SHAPES(arb, a, b);
+    printf("%f\n",cpvdot(cpArbiterGetNormal(arb), cpv(0,1)));
+	if(cpvdot(cpArbiterGetNormal(arb), cpv(0,1)) < 0){
+		return cpArbiterIgnore(arb);
+	}
+
+	return cpTrue;
 }
 
 // Add ball function
@@ -202,6 +193,8 @@ void addBall(GameStruct *game, float px, float py, float vx, float vy,int type){
             game->balls[ballIndex].locationHistoryX[i] = px;
             game->balls[ballIndex].locationHistoryY[i] = py;
         }
+
+        playLaunch(game->sound);
     }
 }
 
@@ -260,6 +253,17 @@ void startGame(GameStruct *game){
     game->gameScore = 0;
     game->powerupScore = 0;
     game->powerupScoreDisplay = 0;
+    game->bumperPowerupState = 0;
+    game->ballPowerupState = 0;
+    game->waterHeight = 0.0f;
+    game->waterPowerupState = 0;
+    game->redPowerupOverlay = 0;
+    game->bluePowerupOverlay = 0;
+    game->slowMotion=0;
+    game->slowMotionCounter=0;
+    game->leftFlipperState=0;
+    game->rightFlipperState=0;
+    iceOverlayAlpha=0.0f;
     inputSetScore(game->input,0);
     inputSetGameState(game->input,STATE_GAME);
     inputSetNumBalls(game->input,game->numLives);
@@ -290,17 +294,19 @@ int main(void){
         {84.0,56.7,84.0,37.2},
         {70.8,18.4,68,26.8},
         {74.8,37.6,68.8,55.6},
-        {82.0,39.2,74.8,63.6}
+        {82.0,39.2,74.8,63.6},
+        {67.400002,146.400009,83.200005,134.199997},
+        {16.400000,146.199997,0.600000,134.600006}
     };
-    writeCircleWallSegment(walls,18,20,0,90,worldWidth-28.5,30.75,28.75);
-    writeCircleWallSegment(walls,38,20,270,360,28.5,30.75,28.75);
-    writeCircleWallSegment(walls,58,10,20,110,64.75,35.6,10.15);
-    writeCircleWallSegment(walls,68,10,20,110,64.75,35.6,17.50);
-    writeCircleWallSegment(walls,78,10,13,110,64.75,35.6,19.50);
+    writeCircleWallSegment(walls,20,20,0,90,worldWidth-28.5,30.75,28.75);
+    writeCircleWallSegment(walls,40,20,270,360,28.5,30.75,28.75);
+    writeCircleWallSegment(walls,60,10,20,110,64.75,35.6,10.15);
+    writeCircleWallSegment(walls,70,10,20,110,64.75,35.6,17.50);
+    writeCircleWallSegment(walls,80,10,13,110,64.75,35.6,19.50);
 
-    InitAudioDevice();
-    Sound sound = LoadSound("Resources/Audio/1.mp3");
-    PlaySound(sound);
+    SoundManager *sound = initSound();
+    game.sound = sound;
+
 
     //SetConfigFlags(FLAG_SHOW_LOGO | FLAG_VSYNC_HINT);
     InitWindow(screenWidth, screenHeight, "Mini Pinball by Chris Dalke!");
@@ -311,6 +317,7 @@ int main(void){
     Texture beachBallTex = LoadTexture("Resources/Textures/beachBall.png");
     Texture trailTex = LoadTexture("Resources/Textures/trail.png");
     Texture bumperTex = LoadTexture("Resources/Textures/bumper.png");
+    Texture bumperLightTex = LoadTexture("Resources/Textures/bumperLight.png");
     Texture iceBumperTex = LoadTexture("Resources/Textures/iceBumper.png");
     Texture shockwaveTex = LoadTexture("Resources/Textures/shockwave.png");
     Texture debugTex = LoadTexture("Resources/Textures/debugSmall.png");
@@ -330,6 +337,7 @@ int main(void){
     Texture iceOverlay = LoadTexture("Resources/Textures/iceOverlay.png");
     Texture bumper3 = LoadTexture("Resources/Textures/bumper3.png");
     Texture lowerBumperShock = LoadTexture("Resources/Textures/lowerBumperShock.png");
+    Texture redPowerupOverlay = LoadTexture("Resources/Textures/redPowerupOverlay.png");
 
     Font font1 = LoadFontEx("Resources/Fonts/Avenir-Black.ttf",80,0,0);
     Font font2 = LoadFontEx("Resources/Fonts/Avenir-Black.ttf",120,0,0);
@@ -379,8 +387,9 @@ int main(void){
 
 
     // Create bumpers
-    const int numBumpers = 9;
+    const int numBumpers = 14;
     const float bumperSize = 10.0f;
+    const float smallBumperSize = 4.0f;
     const float bumperBounciness = 2.2f;
     Bumper* bumpers = malloc(numBumpers * sizeof(Bumper));
 
@@ -409,7 +418,7 @@ int main(void){
 
 
     bumpers[0].body = cpSpaceAddBody(space,cpBodyNewKinematic());
-    cpBodySetPosition(bumpers[0].body,cpv(20.4,20));
+    cpBodySetPosition(bumpers[0].body,cpv(24.9,19.9));
     bumpers[0].shape = cpSpaceAddShape(space,cpCircleShapeNew(bumpers[0].body,bumperSize/2.0f,cpvzero));
     cpShapeSetElasticity(bumpers[0].shape,bumperBounciness);
     cpShapeSetCollisionType(bumpers[0].shape, COLLISION_BUMPER);
@@ -418,7 +427,7 @@ int main(void){
     bumpers[0].type = 0;
 
     bumpers[1].body = cpSpaceAddBody(space,cpBodyNewKinematic());
-    cpBodySetPosition(bumpers[1].body,cpv(42.4,18.4));
+    cpBodySetPosition(bumpers[1].body,cpv(46.6,17.8));
     bumpers[1].shape = cpSpaceAddShape(space,cpCircleShapeNew(bumpers[1].body,bumperSize/2.0f,cpvzero));
     cpShapeSetElasticity(bumpers[1].shape,bumperBounciness);
     cpShapeSetCollisionType(bumpers[1].shape, COLLISION_BUMPER);
@@ -427,7 +436,7 @@ int main(void){
     bumpers[1].type = 0;
 
     bumpers[2].body = cpSpaceAddBody(space,cpBodyNewKinematic());
-    cpBodySetPosition(bumpers[2].body,cpv(33.6,36.8));
+    cpBodySetPosition(bumpers[2].body,cpv(38.0,36.4));
     bumpers[2].shape = cpSpaceAddShape(space,cpCircleShapeNew(bumpers[2].body,bumperSize/2.0f,cpvzero));
     cpShapeSetElasticity(bumpers[2].shape,bumperBounciness);
     cpShapeSetCollisionType(bumpers[2].shape, COLLISION_BUMPER);
@@ -444,7 +453,7 @@ int main(void){
     bumpers[3].bounceEffect = 0;
     bumpers[3].type = 1;
 
-    for (int i = 4; i < 9; i++){
+    for (int i = 4; i < 10; i++){
         bumpers[i].body = cpSpaceAddBody(space,cpBodyNewKinematic());
         bumpers[i].shape = cpSpaceAddShape(space,cpCircleShapeNew(bumpers[i].body,2.0f,cpvzero));
         cpShapeSetElasticity(bumpers[i].shape,0);
@@ -454,21 +463,60 @@ int main(void){
         bumpers[i].type = 2;
         bumpers[i].enabled = 1;
     }
-    cpBodySetPosition(bumpers[4].body,cpv(63.2,50.400002));
-    cpBodySetPosition(bumpers[5].body,cpv(77.6,70.800003));
-    cpBodySetPosition(bumpers[6].body,cpv(61.0,36.000000));
-    cpBodySetPosition(bumpers[7].body,cpv(63.4,28.800001));
-    cpBodySetPosition(bumpers[8].body,cpv(66.2,21.200001));
+    cpBodySetPosition(bumpers[4].body,cpv(63.34,50.88));
+    cpBodySetPosition(bumpers[5].body,cpv(77.38,70.96));
+    cpBodySetPosition(bumpers[6].body,cpv(15.1,62.04));
+    cpBodySetPosition(bumpers[7].body,cpv(18.9,45.3));
+    cpBodySetPosition(bumpers[8].body,cpv(61.02,35.36));
+    cpBodySetPosition(bumpers[9].body,cpv(65.02,23.02));
     bumpers[4].type = 2;
     bumpers[5].type = 2;
-    bumpers[6].type = 3;
+    bumpers[6].type = 2;
     bumpers[7].type = 3;
     bumpers[8].type = 3;
-    bumpers[4].angle = -34;
-    bumpers[5].angle = -34;
-    bumpers[6].angle = 18;
-    bumpers[7].angle = 18;
-    bumpers[8].angle = 18;
+    bumpers[9].type = 3;
+    bumpers[4].angle = 90.0+145.2;
+    bumpers[5].angle = 90.0+145.2;
+    bumpers[6].angle = 90.0+25.7;
+    bumpers[7].angle = 90;
+    bumpers[8].angle = 90-162;
+    bumpers[9].angle = 90-162;
+
+    bumpers[10].body = cpSpaceAddBody(space,cpBodyNewKinematic());
+    cpBodySetPosition(bumpers[10].body,cpv(12.2,81.8));
+    bumpers[10].shape = cpSpaceAddShape(space,cpCircleShapeNew(bumpers[10].body,smallBumperSize/2.0f,cpvzero));
+    cpShapeSetElasticity(bumpers[10].shape,bumperBounciness);
+    cpShapeSetCollisionType(bumpers[10].shape, COLLISION_BUMPER);
+    cpShapeSetUserData(bumpers[10].shape,&bumpers[10]);
+    bumpers[10].bounceEffect = 0;
+    bumpers[10].type = 4;
+
+    bumpers[11].body = cpSpaceAddBody(space,cpBodyNewKinematic());
+    cpBodySetPosition(bumpers[11].body,cpv(23.8,91.2));
+    bumpers[11].shape = cpSpaceAddShape(space,cpCircleShapeNew(bumpers[11].body,smallBumperSize/2.0f,cpvzero));
+    cpShapeSetElasticity(bumpers[11].shape,bumperBounciness);
+    cpShapeSetCollisionType(bumpers[11].shape, COLLISION_BUMPER);
+    cpShapeSetUserData(bumpers[11].shape,&bumpers[11]);
+    bumpers[11].bounceEffect = 0;
+    bumpers[11].type = 4;
+
+    bumpers[12].body = cpSpaceAddBody(space,cpBodyNewKinematic());
+    cpBodySetPosition(bumpers[12].body,cpv(61.2,91.2));
+    bumpers[12].shape = cpSpaceAddShape(space,cpCircleShapeNew(bumpers[12].body,smallBumperSize/2.0f,cpvzero));
+    cpShapeSetElasticity(bumpers[12].shape,bumperBounciness);
+    cpShapeSetCollisionType(bumpers[12].shape, COLLISION_BUMPER);
+    cpShapeSetUserData(bumpers[12].shape,&bumpers[12]);
+    bumpers[12].bounceEffect = 0;
+    bumpers[12].type = 4;
+
+    bumpers[13].body = cpSpaceAddBody(space,cpBodyNewKinematic());
+    cpBodySetPosition(bumpers[13].body,cpv(72.599998,81.8));
+    bumpers[13].shape = cpSpaceAddShape(space,cpCircleShapeNew(bumpers[13].body,smallBumperSize/2.0f,cpvzero));
+    cpShapeSetElasticity(bumpers[13].shape,bumperBounciness);
+    cpShapeSetCollisionType(bumpers[13].shape, COLLISION_BUMPER);
+    cpShapeSetUserData(bumpers[13].shape,&bumpers[13]);
+    bumpers[13].bounceEffect = 0;
+    bumpers[13].type = 4;
 
 
     //Add collision handler for ball-bumper effect
@@ -476,12 +524,36 @@ int main(void){
     handler->beginFunc = CollisionHandlerBallBumper;
 
     cpCollisionHandler *ballFlipperHandler = cpSpaceAddCollisionHandler(space,COLLISION_BALL,COLLISION_PADDLE);
-    handler->preSolveFunc = CollisionHandlerBallFlipper;
+    ballFlipperHandler->preSolveFunc = CollisionHandlerBallFlipper;
 
     cpCollisionHandler *leftLower = cpSpaceAddCollisionHandler(space,COLLISION_BALL,COLLISION_LEFT_LOWER_BUMPER);
     cpCollisionHandler *rightLower = cpSpaceAddCollisionHandler(space,COLLISION_BALL,COLLISION_RIGHT_LOWER_BUMPER);
     leftLower->beginFunc = CollisionHandlerLeftLowerBumper;
     rightLower->beginFunc = CollisionHandlerRightLowerBumper;
+
+    // create one-way door
+	cpShape* oneWayShape = cpSpaceAddShape(space, cpSegmentShapeNew(cpSpaceGetStaticBody(space), cpv(69.6,16.6), cpv(73.4,4.6), 0.5f));
+	cpShapeSetElasticity(oneWayShape, 0.5f);
+	cpShapeSetFriction(oneWayShape, 0.0f);
+	cpShapeSetCollisionType(oneWayShape, COLLISION_ONE_WAY);
+	cpCollisionHandler *oneWayHandler = cpSpaceAddCollisionHandler(space,COLLISION_BALL,COLLISION_ONE_WAY);
+	oneWayHandler->preSolveFunc = CollisionOneWay;
+
+
+	cpShape* tempShape = cpSpaceAddShape(space, cpSegmentShapeNew(cpSpaceGetStaticBody(space), cpv(7.800000,38.200001), cpv(7.8,49.200001), 1.0f));
+	cpShapeSetElasticity(tempShape, 0.5f);
+	cpShapeSetFriction(tempShape, 0.5f);
+	cpShapeSetCollisionType(tempShape, COLLISION_WALL);
+
+	tempShape = cpSpaceAddShape(space, cpSegmentShapeNew(cpSpaceGetStaticBody(space), cpv(16.000000,38.400002), cpv(16.000000,53.799999), 1.0f));
+	cpShapeSetElasticity(tempShape, 0.5f);
+	cpShapeSetFriction(tempShape, 0.5f);
+	cpShapeSetCollisionType(tempShape, COLLISION_WALL);
+
+	tempShape = cpSpaceAddShape(space, cpSegmentShapeNew(cpSpaceGetStaticBody(space), cpv(16.000000,53.799999), cpv(8.600000,68.800003), 1.0f));
+	cpShapeSetElasticity(tempShape, 0.5f);
+	cpShapeSetFriction(tempShape, 0.5f);
+	cpShapeSetCollisionType(tempShape, COLLISION_WALL);
 
     // Create left and right flippers
     cpBody* leftFlipperBody = cpBodyNewKinematic();
@@ -575,7 +647,6 @@ int main(void){
 
     multiballOverlayY = 20 + worldHeight;
 
-
     game.gameState = 5;
 
     char tempString[128];
@@ -591,18 +662,20 @@ int main(void){
         shaderSeconds += GetFrameTime() / 2.0f;
         SetShaderValue(swirlShader, secondsLoc, &shaderSeconds, UNIFORM_FLOAT);
 
-
-        float mouseX = GetMouseX() * 2;
-        float mouseY = GetMouseY() * 2;
+        float mouseX = GetMouseX();
+        float mouseY = GetMouseY();
 
         // Poll input
         inputUpdate(input);
+
+        game.slowMotionFactor = slowMotionFactor;
 
         // STEP SIMULATION AT FIXED RATE
         while (accumulatedTime > timestep){
             accumulatedTime -= timestep;
 
-            //printf("%d %f %d\n",game.transitionState,game.transitionAlpha,game.transitionTarget);
+            updateSound(sound,&game);
+
             if (game.transitionState == 1){
                 // TRANSITION OUT
                 game.transitionAlpha += 15;
@@ -616,23 +689,27 @@ int main(void){
                 switch (game.transitionTarget){
                     case TRANSITION_TO_GAME: {
                         startGame(&game);
-                        printf("Transition to game\n");
+                        bumpers[4].enabled = 1;
+                        bumpers[5].enabled = 1;
+                        bumpers[6].enabled = 1;
+                        bumpers[7].enabled = 1;
+                        bumpers[8].enabled = 1;
+                        bumpers[9].enabled = 1;
+                        bumpers[10].enabled = 0;
+                        bumpers[11].enabled = 0;
+                        bumpers[12].enabled = 0;
+                        bumpers[13].enabled = 0;
                         break;
                     }
                     case TRANSITION_TO_MENU: {
                         game.gameState = 0;
-                        printf("Transition to menu\n");
                         break;
                     }
                     case TRANSITION_GAME_OVER: {
                         game.gameState = 2;
                         game.nameSelectIndex = 0;
                         game.nameSelectDone = 0;
-                        printf("Transition to game over\n");
                         break;
-                    }
-                    default: {
-                        printf("Unknown transition\n");
                     }
                 }
                 game.transitionDelay++;
@@ -657,7 +734,7 @@ int main(void){
                 }
             }
 
-            // Update pinballs
+            // Update menu pinballs
             for (int i = 0; i < 16; i++){
                 menuPinballs[i].px += menuPinballs[i].vx;
                 menuPinballs[i].py += menuPinballs[i].vy;
@@ -670,18 +747,17 @@ int main(void){
                 }
             }
             if (game.gameState == 0){
-                // Menu
-
-
                 if (inputCenterPressed(input)){
                     game.transitionState = 1;
                     game.transitionTarget = TRANSITION_TO_GAME;
+                    playClick(sound);
                 }
-
-                if (inputLeftPressed(input)){
+                if (inputLeftPressed(input))  {
+                    playClick(sound);
                     game.menuState = 1;
                 }
-                if (inputRightPressed(input)){
+                if (inputRightPressed(input)) {
+                    playClick(sound);
                     game.menuState = 0;
                 }
             }
@@ -696,15 +772,59 @@ int main(void){
                     inputSetScore(input,game.gameScore);
                     game.oldGameScore = game.gameScore;
                 }
-
-                if (inputCenter(input)){
-                    //addBall(&game,89.5 - ballSize / 2,160,0,-220);
+                // Check powerups before dispensing balls
+                if (game.ballPowerupState == 0 && !bumpers[7].enabled && !bumpers[8].enabled && !bumpers[9].enabled){
+                    // spawn balls
+                    for (int i =0; i < 3; i++){
+                        addBall(&game,89.5 - ballSize / 2,160 - (i * ballSize),0,-220,1);
+                    }
+                    playBluePowerupSound(sound);
+                    game.bluePowerupOverlay = 1.0f;
+                    game.ballPowerupState = -1;
+                    game.gameScore += 500;
+                    if (game.waterPowerupState == 0){
+                        game.powerupScore += 500;
+                    }
+                } else if (game.ballPowerupState == -1){
+                    // Check if there are no balls left. Then powerup resets and bumpers reset.
+                    if (game.numBalls == 0){
+                        game.ballPowerupState = 0;
+                        bumpers[7].enabled = 1;
+                        bumpers[8].enabled = 1;
+                        bumpers[9].enabled = 1;
+                    }
                 }
+
+                if (game.bumperPowerupState ==0 && !bumpers[4].enabled && !bumpers[5].enabled && !bumpers[6].enabled){
+                    // spawn bumpers
+                    game.bumperPowerupState = -1;
+                    bumpers[10].enabled = 1;
+                    bumpers[11].enabled = 1;
+                    bumpers[12].enabled = 1;
+                    bumpers[13].enabled = 1;
+                    playRedPowerupSound(sound);
+                    game.redPowerupOverlay = 1.0f;
+                    game.gameScore += 500;
+                    if (game.waterPowerupState == 0){
+                        game.powerupScore += 500;
+                    }
+                } else if (game.bumperPowerupState == -1){
+                    if (!bumpers[10].enabled && !bumpers[11].enabled && !bumpers[12].enabled && !bumpers[13].enabled){
+                        game.bumperPowerupState = 0;
+                        bumpers[4].enabled = 1;
+                        bumpers[5].enabled = 1;
+                        bumpers[6].enabled = 1;
+                        game.redPowerupOverlay = 1.0f;
+                    }
+                }
+
                 if (game.numBalls == 0){
-                    if (game.numLives > 1){
-                        game.numLives -= 1;
-                        addBall(&game,89.5 - ballSize / 2,160,0,-220,0);
-                        inputSetNumBalls(input,game.numLives);
+                    if (game.numLives >= 1){
+                        if (inputCenterPressed(input)){
+                            game.numLives -= 1;
+                            addBall(&game,89.5 - ballSize / 2,160,0,-220,0);
+                            inputSetNumBalls(input,game.numLives);
+                        }
                     } else {
                         // game over condition
                         if (game.transitionState == 0){
@@ -712,31 +832,32 @@ int main(void){
                             game.transitionTarget = TRANSITION_GAME_OVER;
                             inputSetGameState(input,STATE_GAME_OVER);
                         }
-                        // Test: Submit score
-                        //submitScore(scores,"DALK",game.gameScore);
-                        //printf("Game Over. score: %d\n",game.gameScore);
                     }
                 }
-                printf("%d %d\n",game.numBalls,game.numLives);
-
 
                 if (IsMouseButtonPressed(0)){
                     addBall(&game,(mouseX) * screenToWorld,(mouseY) * screenToWorld,0,0,1);
                 }
-
-                //h
 
                 float oldAngleLeft = leftFlipperAngle;
                 float oldAngleRight = rightFlipperAngle;
                 float targetAngleLeft = 0.0f;
                 float targetAngleRight = 0.0f;
                 if (inputLeft(input)){
+                    if (game.leftFlipperState == 0){
+                        playFlipper(sound);
+                        game.leftFlipperState = 1;
+                    }
                     targetAngleLeft = -33.0f - 10.0f;
                     leftFlipperAngle -= (flipperSpeed * effectiveTimestep);
                     if (leftFlipperAngle < targetAngleLeft){
                         leftFlipperAngle = targetAngleLeft;
                     }
                 } else {
+                    if (game.leftFlipperState == 1){
+                        playFlipper(sound);
+                    }
+                    game.leftFlipperState = 0;
                     targetAngleLeft = 33.0f;
                     leftFlipperAngle += (flipperSpeed * effectiveTimestep);
                     if (leftFlipperAngle > targetAngleLeft){
@@ -744,12 +865,20 @@ int main(void){
                     }
                 }
                 if (inputRight(input)){
+                    if (game.rightFlipperState == 0){
+                        playFlipper(sound);
+                        game.rightFlipperState = 1;
+                    }
                     targetAngleRight = 213.0f + 10.0f;
                     rightFlipperAngle += (flipperSpeed * effectiveTimestep);
                     if (rightFlipperAngle > targetAngleRight){
                         rightFlipperAngle = targetAngleRight;
                     }
                 } else {
+                    if (game.rightFlipperState == 1){
+                        playFlipper(sound);
+                    }
+                    game.rightFlipperState = 0;
                     targetAngleRight = 147.0f;
                     rightFlipperAngle -= (flipperSpeed * effectiveTimestep);
                     if (rightFlipperAngle < targetAngleRight){
@@ -803,42 +932,6 @@ int main(void){
                     }
                 }
 
-                // For any metaballs, apply downward force
-                /*
-                for (int i = 0; i < maxBalls; i++){
-                    if (balls[i].active == 1 && balls[i].type == 1){
-                        cpVect pos = cpBodyGetPosition(balls[i].body);
-                        cpBodyApplyImpulseAtLocalPoint (balls[i].body, cpv(0,10.0), cpvzero);
-                    }
-                }*/
-
-                // CrazyBall test
-                /*
-                if (inputCenter(input)){
-                    for (int i = 0; i < maxBalls; i++){
-                        if (balls[i].active == 1 && balls[i].type == 0){
-                            cpVect pos = cpBodyGetPosition(balls[i].body);
-                            float hf = sin(shaderSeconds*25) * 10.0f;
-                            float vf = 0;//-20.0 + cos(shaderSeconds*100) * 5.0f;
-                            cpBodyApplyImpulseAtLocalPoint (balls[i].body, cpv(hf,vf), cpvzero);
-                        }
-                    }
-                }*/
-
-                // "Beachball" test
-                // has a low terminal velocity
-                for (int i = 0; i < maxBalls; i++){
-                    if (balls[i].active == 1 && balls[i].type == 2){
-                        cpVect pos = cpBodyGetPosition(balls[i].body);
-                        cpVect vel = cpBodyGetVelocity(balls[i].body);
-                        cpVect forceX = cpvmult(vel,0.0);
-                        cpVect forceY = cpvmult(cpvneg(vel),10);
-                        cpBodyApplyForceAtLocalPoint (balls[i].body, cpv(forceX.x,forceY.y), cpvzero);
-                        cpBodySetAngularVelocity(balls[i].body,vel.x * 0.05f);
-                        //printf("%f %f\n",forceX.x,forceY.y);
-                    }
-                }
-
                 //handler lower bumpers
                 if (leftLowerBumperAnim > 0.0f){
                     leftLowerBumperAnim -= 0.05f;
@@ -852,16 +945,6 @@ int main(void){
                         rightLowerBumperAnim = 0.0f;
                     }
                 }
-
-                //handle multiball overlay
-
-                float multiballOverlayTargetY = 20 + worldHeight - (20.0f * game.numBalls);
-                if (multiballOverlayY < multiballOverlayTargetY){
-                    multiballOverlayY += 0.25f;
-                } else if (multiballOverlayY > multiballOverlayTargetY){
-                    multiballOverlayY -= 0.25f;
-                }
-
 
                 //update ice overlay
                 if (game.slowMotion == 1){
@@ -886,20 +969,51 @@ int main(void){
                     game.slowMotionCounter--;
                     if (game.slowMotionCounter <= 0){
                         game.slowMotion = 0;
+                        playSpeedupSound(sound);
+                    }
+                }
+
+                // Update red and blue powerup overlays
+                if (game.redPowerupOverlay > 0.0f){
+                    game.redPowerupOverlay -= 0.02f * slowMotionFactor;
+                    if (game.redPowerupOverlay <= 0.0f){
+                        game.redPowerupOverlay = 0.0f;
+                    }
+                }
+                if (game.bluePowerupOverlay > 0.0f){
+                    game.bluePowerupOverlay -= 0.04f * slowMotionFactor;
+                    if (game.bluePowerupOverlay <= 0.0f){
+                        game.bluePowerupOverlay = 0.0f;
                     }
                 }
 
                 // Update bumper
                 for (int i = 0; i < numBumpers; i++){
                     bumpers[i].bounceEffect *= 0.94;
+                    if (bumpers[i].enabled){
+                        bumpers[i].enabledSize += 0.1f;
+                        if (bumpers[i].enabledSize > 1.0f){
+                            bumpers[i].enabledSize = 1.0f;
+                        }
+                    } else {
+                        bumpers[i].enabledSize -= 0.1f;
+                        if (bumpers[i].enabledSize < 0.0f){
+                            bumpers[i].enabledSize = 0.0f;
+                        }
+                    }
                 }
 
                 // Update powerup score display
                 if (game.powerupScoreDisplay < game.powerupScore){
-                    game.powerupScoreDisplay += 4;
+                    game.powerupScoreDisplay += 10;
+                    if (game.powerupScoreDisplay > game.powerupScore){
+                        game.powerupScoreDisplay = game.powerupScore;
+                    }
                 } else if (game.powerupScoreDisplay > game.powerupScore){
                     game.powerupScoreDisplay -= 20;
-                    game.powerupScore = 0;
+                    if (game.powerupScoreDisplay < game.powerupScore){
+                        game.powerupScoreDisplay = game.powerupScore;
+                    }
                 }
                 if (game.powerupScoreDisplay < 0){
                     game.powerupScoreDisplay = 0;
@@ -907,32 +1021,91 @@ int main(void){
                 // If the powerup is full, dispense powerup
                 if (game.powerupScoreDisplay >= powerupTargetScore){
                     game.powerupScore = 0;
-                    for (int i =0; i < 8; i++){
-                        addBall(&game,89.5 - ballSize / 2,160 - (i * ballSize),0,-220,1);
+                    game.waterHeightTarget = 0.5f;
+                    game.waterHeightTimer = 400.0f;
+                    game.waterPowerupState = 1;
+                    playWater(sound);
+
+                    game.gameScore += 1000;
+                    if (game.waterPowerupState == 0){
+                        game.powerupScore += 1000;
                     }
-                    //for (int x = -1; x <= 1; x++){
-                    //    for (int y = -1; y <=1; y++){
-                    //        addBall(&game,(screenWidth/2 + x*2) * screenToWorld,(screenHeight/2 + y*ballSize) * screenToWorld,0,0,1);
-                    //    }
-                    //}
+                }
+
+
+                if (game.waterPowerupState == 1){
+                    game.waterHeight += 0.006f * slowMotionFactor;
+                    if (game.waterHeight > game.waterHeightTarget){
+                        game.waterHeight = game.waterHeightTarget;
+                    }
+                } else if (game.waterPowerupState == 2) {
+                    game.waterHeight -= 0.0005f * slowMotionFactor;
+                    if (game.waterHeight < 0.0f){
+                        game.waterHeight = 0.0f;
+                        game.waterPowerupState = 0;
+                    }
+                }
+
+                if (game.waterHeightTimer > 0.0f){
+                    game.waterHeightTimer -= 1.0f * slowMotionFactor;
+                    if (game.waterHeightTimer <= 0.0f){
+                        game.waterHeightTarget = 0.0f;
+                        game.waterPowerupState = 2;
+                        printf("water timer runout\n");
+                    }
+                }
+
+                // If water height powerup active, apply buoyancy forces to balls.
+                if (game.waterHeight > 0){
+                    float waterY = worldHeight * (1.0f - game.waterHeight);
+
+                    for (int i = 0; i < maxBalls; i++){
+                        if (balls[i].active == 1){
+                            cpVect pos = cpBodyGetPosition(balls[i].body);
+                            cpVect vel = cpBodyGetVelocity(balls[i].body);
+                            if (pos.y > waterY){
+                                float distUnderwater = fabs(waterY - pos.y);
+                                float bVely = -200.0f + -(distUnderwater * 40.0f);
+                                cpBodyApplyForceAtLocalPoint (balls[i].body, cpv(0,bVely), cpvzero);
+                                // Apply special forces for flipper
+                                float flipperForce = -1000.0f;
+                                if (pos.x <= worldWidth / 2.0f && fabsf(deltaAngularVelocityLeft) > 0){
+                                    cpBodyApplyForceAtLocalPoint (balls[i].body, cpv(0,flipperForce), cpvzero);
+                                }
+                                if (pos.x >= worldWidth / 2.0f && fabsf(deltaAngularVelocityRight) > 0){
+                                    cpBodyApplyForceAtLocalPoint (balls[i].body, cpv(0,flipperForce), cpvzero);
+                                }
+                                if (balls[i].underwaterState == 0){
+                                    playWaterSplash(sound);
+                                    balls[i].underwaterState = 1;
+                                }
+                            } else {
+                                balls[i].underwaterState = 0;
+                            }
+                        }
+                    }
+
                 }
             }
             if (game.gameState == 2){
                 // Game over
                 if (game.nameSelectDone == 0){
                     if (inputRightPressed(input)){
+                        playClick(sound);
                         game.nameSelectIndex++;
                         if (game.nameSelectIndex > 5){
                             game.nameSelectIndex = 0;
                         }
                     }
                     if (inputLeftPressed(input)){
+                        playClick(sound);
                         game.nameSelectIndex--;
                         if (game.nameSelectIndex < 0){
                             game.nameSelectIndex = 5;
                         }
                     }
                     if (inputCenterPressed(input)){
+                        playClick(sound);
                         if (game.nameSelectIndex == 5){
                             // Name selection done
                             // Submit score and start transition to menu.
@@ -986,45 +1159,32 @@ int main(void){
 
             DrawTexturePro(menuOverlay1,(Rectangle){0,0,titleOverlay.width,titleOverlay.height},(Rectangle){0,0,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
             DrawTexturePro(titleOverlay,(Rectangle){0,0,titleOverlay.width,titleOverlay.height},(Rectangle){0,12 + sin(timeFactor)*5.0f,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
-            //DrawTexturePro(arrowRight,(Rectangle){0,0,arrowRight.width,arrowRight.height},(Rectangle){16,600,32,32},(Vector2){16,16},180,WHITE);
-            //DrawTexturePro(arrowRight,(Rectangle){0,0,arrowRight.width,arrowRight.height},(Rectangle){screenWidth-16,600,32,32},(Vector2){16,16},0,WHITE);
-            //DrawTexturePro(arrowRight,(Rectangle){0,0,arrowRight.width,arrowRight.height},(Rectangle){screenWidth/2,screenHeight-16,32,32},(Vector2){16,16},90,WHITE);
-            if (IsMouseButtonPressed(0)){
-                printf("{%f,%f}\n",(float)(mouseX),(float)(mouseY));
-            }
 
             if (game.menuState == 0){
                 DrawTextEx(font1, "Top Scores", (Vector2){153,329}, 36.0, 1.0, WHITE);
                 float y = 362;
                 for (int i = 1; i <= 10; i++){
                     ScoreObject *score = getRankedScore(scores,i);
-                    float fontSize = 27.0;// - (i * 3.25);
-                    if (fontSize < 18.0){
-                        fontSize = 18.0;
-                    }
-                    Color textColor = WHITE;
                     if (score != NULL){
                         sprintf(tempString,"%d)",i);
-                        DrawTextEx(font1, tempString, (Vector2){66 - MeasureTextEx(font1, tempString, fontSize, 1.0).x,y}, fontSize, 1.0, textColor);
+                        DrawTextEx(font1, tempString, (Vector2){66 - MeasureTextEx(font1, tempString, 27.0, 1.0).x,y}, 27.0, 1.0, WHITE);
                         sprintf(tempString,"%s",score->scoreName);
-                        DrawTextEx(font1, tempString, (Vector2){75,y}, fontSize, 1.0, textColor);
-                        float scoreNameWidth = MeasureTextEx(font1, tempString, fontSize, 1.0).x;
+                        DrawTextEx(font1, tempString, (Vector2){75,y}, 27.0, 1.0, WHITE);
+                        float scoreNameWidth = MeasureTextEx(font1, tempString, 27.0, 1.0).x;
                         sprintf(tempString,"%d",score->scoreValue);
-                        float scoreValueWidth = MeasureTextEx(font1, tempString, fontSize, 1.0).x;
-                        DrawTextEx(font1, tempString, (Vector2){404 - scoreValueWidth,y}, fontSize, 1.0, textColor);
-                        float lineY = y + fontSize / 2.0f - 1.0f;
+                        float scoreValueWidth = MeasureTextEx(font1, tempString, 27.0, 1.0).x;
+                        DrawTextEx(font1, tempString, (Vector2){404 - scoreValueWidth,y}, 27.0, 1.0, WHITE);
+                        float lineY = y + 27.0 / 2.0f - 1.0f;
                         DrawLineEx((Vector2){75 + (scoreNameWidth + 10),lineY}, (Vector2){404 - (scoreValueWidth + 10),lineY}, 2, (Color){255,255,255,50});
                     } else {
-                        textColor = GRAY;
                         sprintf(tempString,"%d)",i);
-                        DrawTextEx(font1, tempString, (Vector2){66 - MeasureTextEx(font1, tempString, fontSize, 1.0).x,y}, fontSize, 1.0, textColor);
-                        DrawTextEx(font1, "No Score", (Vector2){75,y}, fontSize, 1.0, textColor);
+                        DrawTextEx(font1, tempString, (Vector2){66 - MeasureTextEx(font1, tempString, 27.0, 1.0).x,y}, 27.0, 1.0, GRAY);
+                        DrawTextEx(font1, "No Score", (Vector2){75,y}, 27.0, 1.0, GRAY);
                     }
-                    y += (fontSize * 0.8) + 2;
+                    y += (27.0 * 0.8) + 2;
                 }
             } else if (game.menuState == 1){
                 DrawTexturePro(menuControls,(Rectangle){0,0,menuControls.width,menuControls.height},(Rectangle){26,320,menuControls.width/2,menuControls.height/2},(Vector2){0,0},0,WHITE);
-
             }
 
         }
@@ -1034,87 +1194,68 @@ int main(void){
 
             // Draw powerup status under game background
             float powerupProportion = game.powerupScoreDisplay / powerupTargetScore;
-            if (powerupProportion > 1.0f){
-                powerupProportion = 1.0f;
-            }
+            if (powerupProportion > 1.0f){ powerupProportion = 1.0f; }
             float powerupHeight = (powerupEmptyY - powerupFullY) * 2;
             float powerupY = powerupFullY - (powerupProportion * powerupHeight / 2.0f);
             BeginShaderMode(swirlShader);
             DrawTexturePro(waterTex,(Rectangle){0,0,waterTex.width,waterTex.height},(Rectangle){30 * worldToScreen,powerupY* worldToScreen,powerupHeight* worldToScreen,powerupHeight* worldToScreen},(Vector2){0,0},0,WHITE);
             EndShaderMode();
 
-
             DrawTexturePro(bgTex,(Rectangle){0,0,bgTex.width,bgTex.height},(Rectangle){0,0,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
+
+            if (game.redPowerupOverlay > 0.0f){
+                DrawTexturePro(redPowerupOverlay,(Rectangle){0,0,bgTex.width,bgTex.height},(Rectangle){0,0,screenWidth,screenHeight},(Vector2){0,0},0,(Color){255,255,255,40.0*game.redPowerupOverlay});
+            }
+
+            // render bumpers which belong behind balls.
+            for (int i = 0; i < numBumpers; i++){
+                cpVect pos = cpBodyGetPosition(bumpers[i].body);
+                if (bumpers[i].type == 2 || bumpers[i].type == 3){
+                    float width = 8.0f;
+                    float height = 2.0f;
+                    Color bumperColor = (Color){0,0,0,80};
+                    if (bumpers[i].enabled == 0){
+                        width = 8.0f;
+                        height = 1.5f;
+                    } else {
+                        if (bumpers[i].type == 2){
+                            bumperColor = RED;
+                        } else if (bumpers[i].type == 3){
+                            bumperColor = BLUE;
+                        }
+                    }
+                    DrawTexturePro(bumper3,(Rectangle){0,0,bumper3.width,bumper3.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,width * worldToScreen,height * worldToScreen},(Vector2){(width / 2.0) * worldToScreen,(height / 2.0) * worldToScreen},bumpers[i].angle,bumperColor);
+                }
+            }
 
             // Render ball trails
             for (int i = 0; i < maxBalls; i++){
                 if (balls[i].active == 1){
-                    // Render trails
-
-                    //printf("rendiner ball trails\n");
                     for (int ii = 1; ii <= 16; ii++){
-                        //printf("%d\n",ii);
                         int index = (balls[i].trailStartIndex + ii - 1);
-                        if (index >= 16){
-                            index -= 16;
-                        }
+                        if (index >= 16){ index -= 16; }
                         float trailSize = ballSize * sqrt(ii/16.0f);
                         Color ballColor = (Color){255,183,0,255};
                         if (balls[i].type == 1){ ballColor = BLUE; }
-                        if (balls[i].type == 2){
-                            ballColor = WHITE;
-                            trailSize = 20.0f * sqrt(ii/16.0f);
-                        }
                         if (game.slowMotion == 1){ ballColor = WHITE; }
                         DrawTexturePro(trailTex,(Rectangle){0,0,trailTex.width,trailTex.height},(Rectangle){balls[i].locationHistoryX[index] * worldToScreen,balls[i].locationHistoryY[index] * worldToScreen,trailSize * worldToScreen,trailSize * worldToScreen},(Vector2){(trailSize / 2.0) * worldToScreen,(trailSize / 2.0) * worldToScreen},0,ballColor);
 
                     }
                 }
             }
-            //render normal balls
+
+            //render balls
             for (int i = 0; i < maxBalls; i++){
                 if (balls[i].active == 1){
-                    //Render ball
                     cpVect pos = cpBodyGetPosition(balls[i].body);
-                    if (balls[i].type == 0){
-                        Color ballColor = (Color){255,183,0,255};
-                        if (game.slowMotion == 1){ ballColor = WHITE; }
-                        DrawTexturePro(ballTex,(Rectangle){0,0,ballTex.width,ballTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,ballSize * worldToScreen,ballSize * worldToScreen},(Vector2){(ballSize / 2.0) * worldToScreen,(ballSize / 2.0) * worldToScreen},0,ballColor);
-                    }
-                }
-            }
-            // Render special balls
-            //BeginTextureMode(renderTarget);
-            //DrawRectangle(0,0,screenWidth,screenHeight,(Color){0,0,0,50});
-            //BeginBlendMode(BLEND_ADDITIVE);
-            //ClearBackground((Color){0,0,0,10});
-            for (int i = 0; i < maxBalls; i++){
-                if (balls[i].active == 1){
-                    //Render ball
-                    cpVect pos = cpBodyGetPosition(balls[i].body);
-                    Color ballColor = BLUE;
+                    Color ballColor = (Color){255,183,0,255};
+                    if (balls[i].type == 1){ ballColor = BLUE; }
                     if (game.slowMotion == 1){ ballColor = WHITE; }
-                    if (balls[i].type == 1){
-                        DrawTexturePro(ballTex,(Rectangle){0,0,ballTex.width,ballTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,ballSize * worldToScreen,ballSize * worldToScreen},(Vector2){(ballSize / 2.0) * worldToScreen,(ballSize / 2.0) * worldToScreen},0,ballColor);
-                        //DrawTexturePro(particleTex,(Rectangle){0,0,particleTex.width,particleTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,ballSize * worldToScreen * 2,ballSize * worldToScreen * 2},(Vector2){(ballSize * 2 / 2.0) * worldToScreen,(ballSize * 2 / 2.0) * worldToScreen},0,WHITE);
-                    }
-                }
-            }
-            //EndBlendMode();
-            //EndTextureMode();
-
-            // Render beach balls
-            for (int i = 0; i < maxBalls; i++){
-                if (balls[i].active == 1 && balls[i].type == 2){
-                    //Render ball
-                    cpVect pos = cpBodyGetPosition(balls[i].body);
-                    float angle = cpBodyGetAngle(balls[i].body) * RAD_TO_DEG;
-                    float size = 25.0f;
-                    DrawTexturePro(beachBallTex,(Rectangle){0,0,beachBallTex.width,beachBallTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,size * worldToScreen,size * worldToScreen},(Vector2){(size / 2.0) * worldToScreen,(size / 2.0) * worldToScreen},angle,WHITE);
+                    DrawTexturePro(ballTex,(Rectangle){0,0,ballTex.width,ballTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,ballSize * worldToScreen,ballSize * worldToScreen},(Vector2){(ballSize / 2.0) * worldToScreen,(ballSize / 2.0) * worldToScreen},0,ballColor);
                 }
             }
 
-            // Render bumpers
+            // Render bumpers which belong in front of balls
             for (int i = 0; i < numBumpers; i++){
                 cpVect pos = cpBodyGetPosition(bumpers[i].body);
                 if (bumpers[i].type == 0){
@@ -1133,21 +1274,16 @@ int main(void){
                     DrawTexturePro(iceBumperTex,(Rectangle){0,0,iceBumperTex.width,iceBumperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,width * worldToScreen,height * worldToScreen},(Vector2){(width / 2.0) * worldToScreen,(height / 2.0) * worldToScreen},angle,WHITE);
                     DrawTexturePro(trailTex,(Rectangle){0,0,trailTex.width,trailTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,shockSize * worldToScreen,shockSize * worldToScreen},(Vector2){(shockSize / 2.0) * worldToScreen,(shockSize / 2.0) * worldToScreen},0,(Color){255,255,255,255 * shockPercent});
 
-                } else if (bumpers[i].type == 2 || bumpers[i].type == 3){
-                    float width = 3.0f;
-                    float height = 6.0f;
-                    Color bumperColor = (Color){255,255,255,100};
-                    if (bumpers[i].enabled == 0){
-                        width = 1.5f;
-                        height = 6.0f;
-                    } else {
-                        if (bumpers[i].type == 2){
-                            bumperColor = RED;
-                        } else if (bumpers[i].type == 3){
-                            bumperColor = BLUE;
-                        }
-                    }
-                    DrawTexturePro(bumper3,(Rectangle){0,0,bumper3.width,bumper3.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,width * worldToScreen,height * worldToScreen},(Vector2){(width / 2.0) * worldToScreen,(height / 2.0) * worldToScreen},bumpers[i].angle,bumperColor);
+                } else if (bumpers[i].type == 4){
+                    float bounceScale = 0.2f;
+                    float width = smallBumperSize + cos(millis() / 20.0) * bumpers[i].bounceEffect * bounceScale;
+                    float height = smallBumperSize + sin(millis() / 20.0) * bumpers[i].bounceEffect * bounceScale;
+                    width *= bumpers[i].enabledSize;
+                    height *= bumpers[i].enabledSize;
+                    float shockSize = (smallBumperSize * bumpers[i].bounceEffect) * 0.15f;
+                    shockSize *= bumpers[i].enabledSize;
+                    DrawTexturePro(shockwaveTex,(Rectangle){0,0,shockwaveTex.width,shockwaveTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,shockSize * worldToScreen,shockSize * worldToScreen},(Vector2){shockSize/2 * worldToScreen,shockSize/2 * worldToScreen},0,RED);
+                    DrawTexturePro(bumperLightTex,(Rectangle){0,0,bumperTex.width,bumperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,width * worldToScreen,height * worldToScreen},(Vector2){(width / 2.0) * worldToScreen,(height / 2.0) * worldToScreen},0,RED);
                 }
             }
 
@@ -1176,33 +1312,55 @@ int main(void){
             cpVect pos = cpBodyGetPosition(leftFlipperBody);
             cpFloat angle = cpBodyGetAngle(leftFlipperBody);
             DrawTexturePro(leftFlipperTex,(Rectangle){0,0,leftFlipperTex.width,leftFlipperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,flipperWidth * worldToScreen,flipperHeight * worldToScreen},(Vector2){0 * worldToScreen,0 * worldToScreen},(angle * RAD_TO_DEG),WHITE);
+
             // Render right flipper
             pos = cpBodyGetPosition(rightFlipperBody);
             angle = cpBodyGetAngle(rightFlipperBody);
             DrawTexturePro(rightFlipperTex,(Rectangle){0,0,rightFlipperTex.width,rightFlipperTex.height},(Rectangle){pos.x * worldToScreen,pos.y * worldToScreen,flipperWidth * worldToScreen,flipperHeight * worldToScreen},(Vector2){0 * worldToScreen,0 * worldToScreen},(angle * RAD_TO_DEG),WHITE);
 
+            // Render score
             sprintf(tempString,"%ld",game.gameScore);
             DrawTextEx(font1, tempString, (Vector2){10,screenHeight - 35}, 30, 1.0, WHITE);
 
-            // Render special ball render target
-            //DrawTextureRec(renderTarget.texture, (Rectangle){ 0, 0, screenWidth, screenHeight}, (Vector2){ 0, 0 }, WHITE);
-            //BeginShaderMode(alphaTestShader);
-            //DrawTextureRec(renderTarget.texture, (Rectangle){ 0, 0, renderTarget.texture.width, -renderTarget.texture.height }, (Vector2){ 0, 0 }, WHITE);
-            //EndShaderMode();
+            // Render water powerup when active
+            if (game.waterPowerupState > 0){
+                float waterY = screenHeight * (1.0f - game.waterHeight);
+                BeginShaderMode(swirlShader);
+                DrawTexturePro(waterOverlayTex,(Rectangle){0,0,waterOverlayTex.width,waterOverlayTex.height},(Rectangle){0,waterY-30.0f,screenWidth,screenHeight},(Vector2){0,0},0,(Color){255,255,255,100});
+                EndShaderMode();
+            }
 
-            // Multi-ball overlay
-            BeginShaderMode(swirlShader);
+            if (game.bluePowerupOverlay > 0.0f){
+                DrawRectangle(0,0,screenWidth,screenHeight,(Color){128,128,255,128*game.bluePowerupOverlay});
+            }
 
-            DrawTexturePro(waterOverlayTex,(Rectangle){0,0,waterOverlayTex.width,waterOverlayTex.height},(Rectangle){0,multiballOverlayY* worldToScreen,screenWidth+200,screenHeight+200},(Vector2){0,0},0,(Color){255,255,255,100});
-            EndShaderMode();
-
+            // Render ice powerup when active
             if (iceOverlayAlpha > 0.0f){
                 BeginBlendMode(BLEND_ADDITIVE);
                 DrawTexturePro(iceOverlay,(Rectangle){0,0,iceOverlay.width,iceOverlay.height},(Rectangle){0,0,screenWidth,screenHeight},(Vector2){0,0},0,(Color){255,255,255,128*iceOverlayAlpha});
                 EndBlendMode();
             }
 
-            // DEBUG RENDERING
+            if (game.numBalls == 0 && game.numLives > 0){
+                            if ((millis() - elapsedTimeStart) % 1700 >550){
+                DrawRectangleRounded((Rectangle){108,600,screenWidth-238,80},0.1,16,(Color){0,0,0,100});
+                DrawRectangleRounded((Rectangle){112,604,screenWidth-242,76},0.1,16,(Color){0,0,0,100});
+
+                    if (game.numLives == 3){
+                        DrawTextEx(font1, "Ball 1 / 3", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 1 / 3", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
+                    } else if (game.numLives == 2){
+                        DrawTextEx(font1, "Ball 2 / 3", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 2 / 3", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
+                    } else if (game.numLives == 1){
+                        DrawTextEx(font1, "Ball 3 / 3", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Ball 3 / 3", 40.0, 1.0).x/2 - 10,610}, 40, 1.0, WHITE);
+                    }
+                    DrawTextEx(font1, "Center Button to Launch!", (Vector2){screenWidth/2 - MeasureTextEx(font1,  "Center Button to Launch!", 20.0, 1.0).x/2  - 10,650}, 20, 1.0, WHITE);
+                }
+                for (int i = 0; i < 8; i++){
+                    DrawTexturePro(arrowRight,(Rectangle){0,0,arrowRight.width,arrowRight.height},(Rectangle){screenWidth - 9,(i * 20) + 625+ (5 * sin(((i*100)+millis()-elapsedTimeStart)/200.0f)),20,20},(Vector2){16,16},-90,(Color){0,0,0,100});
+                }
+            }
+
+            // Debug Rendering
             if (IsKeyDown(KEY_TAB)){
                 DrawFPS(10, 10);
 
@@ -1234,7 +1392,6 @@ int main(void){
             DrawTexturePro(bgMenu,(Rectangle){0,0,bgMenu.width,bgMenu.height},(Rectangle){xOffset + screenWidth/2,yOffset + screenWidth/2,width,height},(Vector2){width/2,height/2},angle,WHITE);
             EndShaderMode();
 
-
             for (int i = 0; i < 16; i++){
                 DrawTexturePro(ballTex,(Rectangle){0,0,ballTex.width,ballTex.height},(Rectangle){menuPinballs[i].px,menuPinballs[i].py,30,30},(Vector2){0,0},0,(Color){0,0,0,50});
             }
@@ -1246,10 +1403,6 @@ int main(void){
             DrawTextEx(font2, "Score:", (Vector2){screenWidth/2 - MeasureTextEx(font2, "Score:", 60, 1.0).x/2,275}, 60, 1.0, WHITE);
             DrawTextEx(font2, tempString, (Vector2){screenWidth/2 - MeasureTextEx(font2, tempString, 60, 1.0).x/2,332}, 60, 1.0, WHITE);
 
-
-            //DrawTexturePro(titleOverlay,(Rectangle){0,0,titleOverlay.width,titleOverlay.height},(Rectangle){0,12 + sin(timeFactor)*5.0f,screenWidth,screenHeight},(Vector2){0,0},0,WHITE);
-            //DrawTextEx(font1, "Score: ", (Vector2){x,y}, 40, 1.0, textColor);
-            //DrawTextEx(font1, "Enter Name", (Vector2){x,y}, 40, 1.0, textColor);
             for (int i =0; i < 5; i++){
                 sprintf(tempString,"%c",nameString[i]);
                 float textWidth = MeasureTextEx(font2, tempString, 60, 1.0).x;
@@ -1267,15 +1420,10 @@ int main(void){
         }
 
         if (game.transitionState > 0){
-            //DrawRectangle(0,0,screenWidth,screenHeight,(Color){255,255,255,game.transitionAlpha});
             SetShaderValue(swirlShader, secondsLoc, &shaderSeconds, UNIFORM_FLOAT);
-			//BeginShaderMode(swirlShader);
             float transitionAmount = ((game.transitionAlpha / 255.0f));
             DrawRectanglePro((Rectangle){screenWidth,screenHeight,screenWidth,screenHeight + 200}, (Vector2){0,screenHeight + 200}, -33.0f * transitionAmount, BLACK);
             DrawRectanglePro((Rectangle){0,0,screenWidth,screenHeight + 200}, (Vector2){screenWidth,0}, -33.0f * transitionAmount, BLACK);
-            //DrawLineEx((Vector2){0,0},(Vector2){screenWidth * transitionAmount,screenHeight},4,WHITE);
-            //DrawLineEx((Vector2){0,screenWidth * transitionAmount},(Vector2){screenWidth,screenHeight},4,WHITE);
-            //EndShaderMode();
         }
 
         EndDrawing();
@@ -1283,9 +1431,7 @@ int main(void){
 
     shutdownScores(scores);
     inputShutdown(input);
-    UnloadSound(sound);
-    CloseAudioDevice();
-
+    shutdownSound(sound);
     CloseWindow();
 
     return 0;
