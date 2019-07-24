@@ -390,7 +390,7 @@ int main(void){
     const int numBumpers = 14;
     const float bumperSize = 10.0f;
     const float smallBumperSize = 4.0f;
-    const float bumperBounciness = 2.2f;
+    const float bumperBounciness = 1.8f;
     Bumper* bumpers = malloc(numBumpers * sizeof(Bumper));
 
 
@@ -400,10 +400,10 @@ int main(void){
     cpShapeSetCollisionType(bouncer2, COLLISION_RIGHT_LOWER_BUMPER);
 
     cpShapeSetFriction(bouncer1,0.0);
-    cpShapeSetElasticity(bouncer1,1.5f);
+    cpShapeSetElasticity(bouncer1,1.2f);
     cpSpaceAddShape(space,bouncer1);
     cpShapeSetFriction(bouncer2,0.0);
-    cpShapeSetElasticity(bouncer2,1.5f);
+    cpShapeSetElasticity(bouncer2,1.2f);
     cpSpaceAddShape(space,bouncer2);
     cpShape *bouncerGuard1 = cpSegmentShapeNew(cpSpaceGetStaticBody(space),cpv(7.200000,111.200005),cpv(12.800000,124.400002),0);
     cpShape *bouncerGuard2 = cpSegmentShapeNew(cpSpaceGetStaticBody(space),cpv(71.200005,124.800003),cpv(76.000000,110.800003),0);
