@@ -9,3 +9,7 @@ A Raspberry Pi 4 runs a custom-designed pinball game which interacts with the ph
 
 - For a detailed writeup, see https://www.chrisdalke.com/projects/mini-pinball-machine/
 - For a demo video, see https://www.youtube.com/watch?v=iiBn7FVzlcc
+
+![Buttons](screen.png)
+![Buttons](matrix.png)
+![Buttons](buttons.png)
