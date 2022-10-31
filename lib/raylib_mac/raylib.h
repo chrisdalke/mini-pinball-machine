@@ -151,7 +151,7 @@
 
 // Temporal hack to avoid breaking old codebases using
 // deprecated raylib implementation of these functions
-#define FormatText  TextFormat
+#define TextFormat  TextFormat
 #define SubText     TextSubtext
 #define ShowWindow  UnhideWindow
 
@@ -705,7 +705,7 @@ typedef enum {
 // Shader uniform data types
 typedef enum {
     UNIFORM_FLOAT = 0,
-    UNIFORM_VEC2,
+    SHADER_UNIFORM_VEC2,
     UNIFORM_VEC3,
     UNIFORM_VEC4,
     UNIFORM_INT,

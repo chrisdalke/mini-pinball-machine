@@ -11,8 +11,8 @@ SoundManager *initSound(){
     InitAudioDevice();
     sound->menuMusic = LoadMusicStream("Resources/Audio/1.mp3");
     sound->gameMusic = LoadMusicStream("Resources/Audio/5.mp3");
-    SetMusicLoopCount(sound->menuMusic,1000);
-    SetMusicLoopCount(sound->gameMusic,1000);
+    // SetMusicLoopCount(sound->menuMusic,1000);
+    // SetMusicLoopCount(sound->gameMusic,1000);
     sound->redPowerup = malloc(sizeof(Sound) * 4);
     sound->bluePowerup = malloc(sizeof(Sound) * 4);
     sound->slowdown = malloc(sizeof(Sound) * 4);
@@ -42,13 +42,13 @@ SoundManager *initSound(){
 void updateSound(SoundManager *sound, GameStruct *game){
     // Play and transition music streams based on game mode.
     if (game->gameState == 0){
-        if (!IsMusicPlaying(sound->menuMusic)){
+        if (!IsMusicStreamPlaying(sound->menuMusic)){
             PlayMusicStream(sound->menuMusic);
             StopMusicStream(sound->gameMusic);
         }
         UpdateMusicStream(sound->menuMusic);
     } else if (game->gameState == 1 || game->gameState == 2){
-        if (!IsMusicPlaying(sound->gameMusic)){
+        if (!IsMusicStreamPlaying(sound->gameMusic)){
             PlayMusicStream(sound->gameMusic);
             StopMusicStream(sound->menuMusic);
         }

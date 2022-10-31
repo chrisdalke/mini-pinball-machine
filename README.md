@@ -12,4 +12,4 @@ A Raspberry Pi 4 runs a custom-designed pinball game which interacts with the ph
 
 <br />
 
-![Buttons](screen.png)
+![Buttons](resources/readme/screen.png)

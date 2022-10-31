@@ -303,13 +303,13 @@ int main(void){
     writeCircleWallSegment(walls,70,10,20,110,64.75,35.6,17.50);
     writeCircleWallSegment(walls,80,10,13,110,64.75,35.6,19.50);
 
+    SetConfigFlags(FLAG_VSYNC_HINT);
+    InitWindow(screenWidth, screenHeight, "Mini Pinball by Chris Dalke!");
+    SetTargetFPS(60);
+
     SoundManager *sound = initSound();
     game.sound = sound;
 
-
-    SetConfigFlags(FLAG_SHOW_LOGO | FLAG_VSYNC_HINT);
-    InitWindow(screenWidth, screenHeight, "Mini Pinball by Chris Dalke!");
-    SetTargetFPS(60);
 
     Texture bgTex = LoadTexture("Resources/Textures/background2.png");
     Texture ballTex = LoadTexture("Resources/Textures/ball.png");
@@ -341,9 +341,9 @@ int main(void){
     Font font1 = LoadFontEx("Resources/Fonts/Avenir-Black.ttf",80,0,0);
     Font font2 = LoadFontEx("Resources/Fonts/Avenir-Black.ttf",120,0,0);
 
-    Shader alphaTestShader = LoadShader(0, FormatText("resources/shaders/glsl%i/alphaTest.fs", GLSL_VERSION));
+    Shader alphaTestShader = LoadShader(0, TextFormat("resources/shaders/glsl%i/alphaTest.fs", GLSL_VERSION));
 
-    Shader swirlShader = LoadShader(0, FormatText("Resources/Shaders/glsl%i/wave.fs", GLSL_VERSION));
+    Shader swirlShader = LoadShader(0, TextFormat("Resources/Shaders/glsl%i/wave.fs", GLSL_VERSION));
     int secondsLoc = GetShaderLocation(swirlShader, "secondes");
 	int freqXLoc = GetShaderLocation(swirlShader, "freqX");
 	int freqYLoc = GetShaderLocation(swirlShader, "freqY");
@@ -358,14 +358,16 @@ int main(void){
 	float speedX = 8.0f;
 	float speedY = 8.0f;
     float screenSize[2] = {screenWidth,screenHeight};
-	SetShaderValue(swirlShader, GetShaderLocation(swirlShader, "size"), &screenSize, UNIFORM_VEC2);
-	SetShaderValue(swirlShader, freqXLoc, &freqX, UNIFORM_FLOAT);
-	SetShaderValue(swirlShader, freqYLoc, &freqY, UNIFORM_FLOAT);
-	SetShaderValue(swirlShader, ampXLoc, &ampX, UNIFORM_FLOAT);
-	SetShaderValue(swirlShader, ampYLoc, &ampY, UNIFORM_FLOAT);
-	SetShaderValue(swirlShader, speedXLoc, &speedX, UNIFORM_FLOAT);
-	SetShaderValue(swirlShader, speedYLoc, &speedY, UNIFORM_FLOAT);
+	SetShaderValue(swirlShader, GetShaderLocation(swirlShader, "size"), &screenSize, SHADER_UNIFORM_VEC2);
+	SetShaderValue(swirlShader, freqXLoc, &freqX, SHADER_UNIFORM_FLOAT);
+	SetShaderValue(swirlShader, freqYLoc, &freqY, SHADER_UNIFORM_FLOAT);
+	SetShaderValue(swirlShader, ampXLoc, &ampX, SHADER_UNIFORM_FLOAT);
+	SetShaderValue(swirlShader, ampYLoc, &ampY, SHADER_UNIFORM_FLOAT);
+	SetShaderValue(swirlShader, speedXLoc, &speedX, SHADER_UNIFORM_FLOAT);
+	SetShaderValue(swirlShader, speedYLoc, &speedY, SHADER_UNIFORM_FLOAT);
     float shaderSeconds = 0.0f;
+
+    TraceLog(LOG_INFO, "HELLO");
 
 
     // Initialize physics simulation
@@ -375,6 +377,8 @@ int main(void){
     cpSpaceSetGravity(space,gravity);
     cpFloat timeStep = 1.0/60.0;
 
+    TraceLog(LOG_INFO, "WALLS");
+
     // create walls
     for (int i = 0; i < numWalls; i++){
         cpShape *wall = cpSegmentShapeNew(cpSpaceGetStaticBody(space),cpv(walls[i][0],walls[i][1]),cpv(walls[i][2],walls[i][3]),0);
@@ -383,6 +387,8 @@ int main(void){
         cpShapeSetCollisionType(wall, COLLISION_WALL);
         cpSpaceAddShape(space,wall);
     }
+
+    TraceLog(LOG_INFO, "BUMPERS");
 
 
     // Create bumpers
@@ -545,6 +551,7 @@ int main(void){
 	cpShapeSetCollisionType(oneWayShape, COLLISION_ONE_WAY);
 	cpCollisionHandler *oneWayHandler = cpSpaceAddCollisionHandler(space,COLLISION_BALL,COLLISION_ONE_WAY);
 	oneWayHandler->preSolveFunc = CollisionOneWay;
+    TraceLog(LOG_INFO, "DOOR");
 
 
 	cpShape* tempShape = cpSpaceAddShape(space, cpSegmentShapeNew(cpSpaceGetStaticBody(space), cpv(7.800000,38.200001), cpv(7.8,49.200001), 1.0f));
@@ -561,10 +568,11 @@ int main(void){
 	cpShapeSetElasticity(tempShape, 0.5f);
 	cpShapeSetFriction(tempShape, 0.5f);
 	cpShapeSetCollisionType(tempShape, COLLISION_WALL);
+    TraceLog(LOG_INFO, "FLIPPERS");
 
     // Create left and right flippers
-    cpBody* leftFlipperBody = cpBodyNewKinematic();
-    cpBody* rightFlipperBody = cpBodyNewKinematic();
+    cpBody* leftFlipperBody =  cpSpaceAddBody(space,cpBodyNewKinematic());
+    cpBody* rightFlipperBody =  cpSpaceAddBody(space,cpBodyNewKinematic());
     cpBodySetPosition(leftFlipperBody,cpv(19.8,145.45));
     cpBodySetPosition(rightFlipperBody,cpv(63.5,145.45));
     const cpVect flipperPoly[4] = {
@@ -590,6 +598,7 @@ int main(void){
     float powerupFullY = 64.0f;
     float powerupEmptyY = 104.4f;
     float powerupTargetScore = 5000.0f;
+    TraceLog(LOG_INFO, "BALLS");
 
     //create balls array
     Ball* balls = malloc(maxBalls * sizeof(Ball));
@@ -661,13 +670,14 @@ int main(void){
     sprintf(nameString,"     ");
 
     inputSetGameState(input,STATE_MENU);
+    TraceLog(LOG_INFO, "START");
 
     while (!WindowShouldClose()){
         endTime = millis();
         accumulatedTime += (endTime - startTime);
         startTime = millis();
         shaderSeconds += GetFrameTime() / 2.0f;
-        SetShaderValue(swirlShader, secondsLoc, &shaderSeconds, UNIFORM_FLOAT);
+        SetShaderValue(swirlShader, secondsLoc, &shaderSeconds, SHADER_UNIFORM_FLOAT);
 
         float mouseX = GetMouseX();
         float mouseY = GetMouseY();
@@ -1403,7 +1413,7 @@ int main(void){
             float angle = sin(timeFactor * 2) * 20 + cos(timeFactor / 3) * 25;
             float width = screenWidth * 3;
             float height = screenHeight * 3;
-            SetShaderValue(swirlShader, secondsLoc, &shaderSeconds, UNIFORM_FLOAT);
+            SetShaderValue(swirlShader, secondsLoc, &shaderSeconds, SHADER_UNIFORM_FLOAT);
 			BeginShaderMode(swirlShader);
             DrawTexturePro(bgMenu,(Rectangle){0,0,bgMenu.width,bgMenu.height},(Rectangle){xOffset + screenWidth/2,yOffset + screenWidth/2,width,height},(Vector2){width/2,height/2},angle,WHITE);
             EndShaderMode();
@@ -1436,7 +1446,7 @@ int main(void){
         }
 
         if (game.transitionState > 0){
-            SetShaderValue(swirlShader, secondsLoc, &shaderSeconds, UNIFORM_FLOAT);
+            SetShaderValue(swirlShader, secondsLoc, &shaderSeconds, SHADER_UNIFORM_FLOAT);
             float transitionAmount = ((game.transitionAlpha / 255.0f));
             DrawRectanglePro((Rectangle){screenWidth,screenHeight,screenWidth,screenHeight + 200}, (Vector2){0,screenHeight + 200}, -33.0f * transitionAmount, BLACK);
             DrawRectanglePro((Rectangle){0,0,screenWidth,screenHeight + 200}, (Vector2){screenWidth,0}, -33.0f * transitionAmount, BLACK);
